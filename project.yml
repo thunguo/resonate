@@ -1,0 +1,80 @@
+name: Yuyin
+options:
+  bundleIdPrefix: space.thunguo
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+  CarPlay: release
+  PersonalDevice: debug
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
+packages:
+  MusicCore:
+    path: Packages/MusicCore
+targets:
+  Yuyin:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    dependencies:
+      - package: MusicCore
+      - target: YuyinWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.thunguo.yuyin
+        INFOPLIST_FILE: Config/App-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/App.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        CarPlay:
+          CODE_SIGN_ENTITLEMENTS: Config/CarPlay.entitlements
+        PersonalDevice:
+          CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG PERSONAL_DEVICE"
+    scheme:
+      testTargets: [YuyinTests, YuyinUITests]
+      gatherCoverageData: true
+  YuyinWidget:
+    type: app-extension
+    platform: iOS
+    sources: [Widget, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.thunguo.yuyin.widget
+        INFOPLIST_FILE: Config/Widget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/App.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+      configs:
+        PersonalDevice:
+          CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG PERSONAL_DEVICE"
+  YuyinTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: Yuyin
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.thunguo.yuyin.tests
+        GENERATE_INFOPLIST_FILE: YES
+  YuyinUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Yuyin
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: space.thunguo.yuyin.uitests
+        GENERATE_INFOPLIST_FILE: YES

@@ -1,0 +1,102 @@
+# 开发说明
+
+## 工程结构
+
+| 目录 | 职责 |
+| --- | --- |
+| `App/Views`、`App/Design` | SwiftUI 页面、配色和基础控件 |
+| `App/Playback` | AVPlayer、队列状态、锁屏控制和音频会话 |
+| `App/Infrastructure` | 账号、SwiftData、缓存、下载和系统接入 |
+| `Packages/MusicCore` | 音乐服务、AI 协议、领域模型、歌词与编排校验 |
+| `Shared`、`Widget` | App Intents、小组件、共享摘要和隐私 API 声明 |
+| `Config` | 构建配置、Info.plist 和 entitlements |
+| `Tests`、`UITests` | 原生播放回归与界面测试 |
+
+`MusicCore` 没有第三方 Swift 依赖。主 App 使用 SwiftUI、SwiftData、AVFoundation 和 MediaPlayer，最低部署版本为 iOS 18。
+
+## 构建与测试
+
+在仓库根目录运行：
+
+```sh
+swift test --package-path Packages/MusicCore
+
+xcodebuild -project Yuyin.xcodeproj -scheme Yuyin \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
+
+xcodebuild -project Yuyin.xcodeproj -scheme Yuyin \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+将测试设备名称替换为已安装的模拟器。核心协议测试使用固定响应，UI 测试使用内存数据；测试不会发送验证码、修改真实歌单或产生模型费用。播放回归使用本地无声 WAV 驱动实际 AVPlayer。
+
+UI 无障碍回归检查主要触控区域和控件描述。自动对比度扫描单独作为诊断，在 Scheme 的 Test 环境变量中设置 `YUYIN_CONTRAST_AUDIT=1` 可启用；扫描结果包含系统遮挡区域，需结合截图人工复核。标准测试通过不代表全部界面已完成无障碍验收。
+
+只读音乐服务探测：
+
+```sh
+swift run --package-path Packages/MusicCore MusicProbe
+```
+
+它会请求公共搜索、详情、歌词、推荐与播放资源信息，不下载音频，不执行账号写入。其结果不能替代真实登录、会员播放、模型调用或真机后台测试。
+
+## 修改工程配置
+
+`project.yml` 是工程配置来源，生成的 `Yuyin.xcodeproj` 一并提交，方便直接打开。修改配置或新增文件后，用 XcodeGen 重新生成并检查差异：
+
+```sh
+xcodegen generate
+```
+
+个人 Team 和 Bundle Identifier 的本地调整不要提交。若需要长期保留自定义标识，应同时更新 `project.yml` 与工程，避免重新生成时恢复默认值。
+
+宿主测试 `YuyinTests` 通过主 App 使用 MusicCore。不要重复添加 MusicCore 产品依赖，否则 Xcode 可能改用动态包框架，改变测试宿主的链接方式。
+
+## 预览
+
+在 Scheme 的 Run → Arguments 中添加 `--preview`，使用内存中的示例音乐库。只有 DEBUG 构建支持预览，普通启动读取真实账号状态。
+
+| 参数 | 用途 |
+| --- | --- |
+| `--dark` | 深色外观 |
+| `--player` / `--library` / `--settings` | 直接打开对应页面 |
+| `--home-guest` / `--home-signed-in` | 未登录或已登录但没有播放队列的首页 |
+| `--home-empty` / `--home-syncing` / `--home-sync-failed` | 配合已登录状态检查空库、同步和失败 |
+| `--ai-result` | 编排结果示例 |
+| `--long-title` | 长标题布局 |
+
+发布或日常使用时清空预览参数。
+
+## 数据与 AI
+
+- 网易云收藏与歌单以远端为准。本机按账号保存镜像、历史、队列和偏好；写入成功后更新同步状态。
+- 完整歌单读取 `trackIds` 或分页接口，保留缺失曲目的 ID。账号切换后拒收旧会话响应。
+- Cookie、API Key 和敏感自定义请求头存入设备 Keychain；不写入源码或日志。服务端缓存与日志隔离仍需独立验证。
+- 编排先检索真实候选、检查全曲可播放性，再交给模型筛选；本地校验 ID、时长、来源比例和固定项目。应用前再次检查队列是否变化。
+- 导读只为实际取得的资料生成来源链接。没有进行音频信号分析，来源约束不能替代事实质量抽检。
+- 模型请求从手机直达所选 HTTPS 服务，不发送音乐账号凭据，也不静默切换厂商。自定义服务支持 OpenAI 兼容 Chat Completions。
+- 封面缓存上限 80 MB，AI 编排保留最近 10 次。本机聆听统计可清除，不包含远程分析 SDK。
+
+默认音乐 API 地址位于 `MusicService` 的初始化参数中。
+
+## 系统能力
+
+| 能力 | 当前状态 |
+| --- | --- |
+| 后台音频、AirPlay、锁屏控制 | 已接入统一播放器，仍需真实耳机、来电和网络切换验收 |
+| 小组件与快捷指令 | 使用 App Intent 打开主 App 后播放；真机发现、刷新与冷启动需实测 |
+| App Groups | Debug/Release 使用共享摘要；`PersonalDevice` 不申请该权限，不能跨扩展共享播放状态 |
+| CarPlay | 系统音频模板位于独立 `CarPlay` 配置；需 Apple 音频 entitlement 和车载验证 |
+| 离线下载 | 当前关闭；授权、逐曲资格及动态撤销机制完善后再开放 |
+
+标准 App Group 为 `group.space.thunguo.yuyin`。修改时同步更新 `Config/App.entitlements`、`Config/CarPlay.entitlements` 与 `Shared/WidgetSnapshot.swift`，并为两个 target 配置一致的签名能力。
+
+离线相关发行字段为 `YYOfflineDownloadEnabled` 和 `YYOfflineAuthorizationValidUntil`；配置开关不替代实际音乐授权。公开发行前仍需完成服务与音乐使用许可、隐私政策、数据披露和设备验收。
+
+## 仓库约定
+
+提交源码、资源、共享工程配置、测试、产品截图和维护文档。构建产物、用户设置、签名材料、密钥、日志及本地验收记录由 `.gitignore` 排除。

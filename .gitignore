@@ -1,0 +1,54 @@
+# macOS and editors
+.DS_Store
+.AppleDouble
+.LSOverride
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Xcode and Swift build output
+/build/
+/DerivedData/
+/Archives/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.app/
+*.dSYM/
+*.dSYM.zip
+*.ipa
+*.xcarchive/
+*.xcresult/
+*.profdata
+*.profraw
+
+# Local credentials and signing
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pfx
+*.cer
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+
+# Local reports and exports
+/work/
+/outputs/
+*.log
+*.zip
+/Docs/QA.md
+/Docs/verification.json
+/Docs/IMPLEMENTATION.md
+/Docs/PRIVACY-RELEASE-DRAFT.md
+/Screenshots/home-signed-in.png
+/Screenshots/player-large-text.png
+/Screenshots/player-long-title-dark.png
