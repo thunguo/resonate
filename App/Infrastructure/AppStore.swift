@@ -58,7 +58,8 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     var isCreatingPlaylist = false
     var metrics = LocalMetrics()
     var previewMode = false
-    @ObservationIgnored private(set) var accountGeneration = UUID()
+    private(set) var accountGeneration = UUID()
+    @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var started = false
     @ObservationIgnored private var restoringAccount = true
     @ObservationIgnored private var widgetUpdateAt = Date.distantPast
@@ -103,7 +104,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         let generation = accountGeneration
         await hydrateAccount()
         guard generation == accountGeneration else { return }
-        if profile != nil, let data = Keychain.read("netease.cookie"), let cookie = String(data: data, encoding: .utf8) {
+        if !persistence.isInMemory, profile != nil, let data = Keychain.read("netease.cookie"), let cookie = String(data: data, encoding: .utf8) {
             await music.setCookie(cookie)
             async let account: Void = refreshProfile()
             async let collection: Void = syncLibrary(refresh: false)
@@ -142,7 +143,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         let former = profile?.id
         if let former, former != result.profile.id { await logout() }
         if former != result.profile.id { player.clear() }
-        try Keychain.write(Data(result.cookie.utf8), key: "netease.cookie")
+        if !persistence.isInMemory { try Keychain.write(Data(result.cookie.utf8), key: "netease.cookie") }
         accountGeneration = UUID(); try? await repository.reset(); await music.setCookie(result.cookie)
         profile = result.profile; persist(result.profile, key: "activeProfile"); loadAccount(); showLogin = false; sessionExpired = false
         await hydrateAccount()
@@ -161,16 +162,17 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         let old = profile?.id ?? 0
         await persistTask?.value
         Task { await ArtworkStore.shared.clear() }
-        Keychain.remove("netease.cookie"); await music.setCookie("")
+        if !persistence.isInMemory { Keychain.remove("netease.cookie") }; await music.setCookie("")
         try? await repository.reset(removing: "account.\(old).")
         try? persistence.remove(prefix: "activeProfile")
         profile = nil; sessionExpired = false; loadAccount(); discoveries = []; syncError = nil; SharedListening.clear(); WidgetCenter.shared.reloadAllTimelines()
         NotificationCenter.default.post(name: Notification.Name("YuyinLibraryDidChange"), object: nil)
+        await hydrateAccount()
         await refreshDiscoveries()
     }
     func accountKey(_ suffix: String) -> String { "account.\(profile?.id ?? 0).\(suffix)" }
     private func loadAccount() {
-        isSyncing = false; isLoading = false; restoringAccount = true
+        isSyncing = false; isLoading = false; restoringAccount = true; pendingURL = nil
         let home = persistence.load(HomeSnapshot.self, key: accountKey("home"))
         library = .init(accountID: profile?.id ?? 0, likedTracks: home?.tracks ?? [], syncedAt: .distantPast)
         discoveries = home?.discoveries ?? []
@@ -217,9 +219,10 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     func report(_ error: Error) { if error is CancellationError { return }; notice = .init(message: error.localizedDescription) }
     func notify(_ message: String) { notice = .init(message: message) }
     func savePreferences() { player.quality = preferences.quality; downloads.wifiOnly = preferences.wifiOnly; persist(preferences, key: accountKey("preferences")); updateWidget(force: true) }
-    func saveArrangement(_ value: Arrangement) {
+    @discardableResult func saveArrangement(_ value: Arrangement, for generation: UUID) -> Bool {
+        guard generation == accountGeneration else { return false }
         recentArrangements.removeAll { $0.id == value.id }; recentArrangements.insert(value, at: 0)
-        recentArrangements = Array(recentArrangements.prefix(10)); persist(recentArrangements, key: accountKey("ai.arrangements"))
+        recentArrangements = Array(recentArrangements.prefix(10)); persist(recentArrangements, key: accountKey("ai.arrangements")); return true
     }
     func explanationRecord(_ id: Int64) -> ExplanationRecord? { persistence.load(ExplanationRecord.self, key: accountKey("ai.explanation.\(id)")) }
     func saveExplanation(_ value: ExplanationRecord) { persist(value, key: accountKey("ai.explanation.\(value.trackID)")) }
@@ -352,8 +355,13 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     }
     func handleURL(_ url: URL) {
         guard url.scheme == "yuyin" else { return }
-        if url.host == "resume" { player.resume(); showPlayer = player.current != nil }
+        guard !restoringAccount || previewMode else { pendingURL = url; return }
+        if url.host == "resume" {
+            if player.current != nil { player.resume(); showPlayer = true }
+            else { selectedTab = 1; if !isLoggedIn && !previewMode { showLogin = true } else { notify("从音乐库选一首，开始听。") } }
+        }
         else if url.host == "playlist", let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "id" })?.value, let id = Int64(raw) {
+            guard isLoggedIn || previewMode else { showLogin = true; return }
             let generation = accountGeneration
             Task { do { let tracks = try await playlistTracks(id); guard generation == accountGeneration else { return }; player.play(tracks); showPlayer = !tracks.isEmpty } catch { if generation == accountGeneration { report(error) } } }
         }
@@ -374,7 +382,12 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     private func persist<T: Encodable>(_ value: T, key: String) { do { try persistence.save(value, key: key) } catch { notice = .init(message: "本地保存失败，请检查设备存储空间。") } }
     private func hydrateAccount() async {
         let generation = accountGeneration, prefix = accountKey("")
-        defer { if generation == accountGeneration { restoringAccount = false; player.finishRestoration(nil) } }
+        defer {
+            if generation == accountGeneration {
+                restoringAccount = false; player.finishRestoration(nil)
+                if let url = pendingURL { pendingURL = nil; handleURL(url) }
+            }
+        }
         do {
             if let saved = try await background.load(ListeningHistory.self, key: prefix + "history"), generation == accountGeneration { history = saved }
             if let queue = try await background.load(QueueState.self, key: prefix + "queue"), generation == accountGeneration, !queueWasChanged {

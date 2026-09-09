@@ -46,7 +46,11 @@ swift run --package-path Packages/MusicCore MusicProbe
 
 ## 诊断与回归记录
 
-设置中的“诊断与反馈”可预览和导出本机白名单计时，默认不上传。当前实测、模拟验证和待验收项目见 [质量记录](QUALITY.md)。
+设置中的“诊断与反馈”可分页预览和导出本机白名单计时，默认不上传。当前实测、模拟验证和待验收项目见 [质量记录](QUALITY.md)。
+
+CI 固定使用 `macos-26`、Xcode 26.6，分别执行核心、原生与界面用例。`Scripts/check-test-results.py` 检查 Swift Testing 完成摘要或 xcresult 的实际通过数量；零用例、失败或未达到最低数量均不能通过。新增测试时同步更新 `.github/workflows/quality.yml` 的数量门槛。
+
+视觉基础和交互规则见 [设计规范](DESIGN_SYSTEM.md)。
 
 ## 性能验收
 
@@ -78,7 +82,9 @@ xcodegen generate
 | `--player` / `--library` / `--settings` | 直接打开对应页面 |
 | `--home-guest` / `--home-signed-in` | 未登录或已登录但没有播放队列的首页 |
 | `--home-empty` / `--home-syncing` / `--home-sync-failed` | 配合已登录状态检查空库、同步和失败 |
-| `--ai-result` | 编排结果示例 |
+| `--ai-result` / `--saved-ai-result` | 编排结果及已保存结果示例 |
+| `--search-test` | 搜索分页与一次失败的固定响应 |
+| `--audio-test` / `--audio-paused` | 本地 WAV 播放时序 |
 | `--long-title` | 长标题布局 |
 | `--reading-test` | 独立示例歌词与长队列，检查关闭再打开的位置恢复 |
 

@@ -188,8 +188,8 @@ extension YuyinUITests {
         app.tabBars.buttons["搜索"].tap()
         let field = app.textFields["searchField"]; field.tap(); field.typeText("fixture")
         XCTAssertTrue(app.staticTexts["曲目0"].waitForExistence(timeout: 5))
-        for _ in 0..<14 where !app.buttons["searchMore"].isHittable { app.swipeUp() }
-        XCTAssertTrue(app.buttons["searchMore"].isHittable); app.buttons["searchMore"].tap()
+        let more = app.buttons["searchMore"]
+        XCTAssertTrue(more.waitForExistence(timeout: 5)); more.tap()
         for _ in 0..<14 where !app.buttons["重试"].isHittable { app.swipeDown() }
         XCTAssertTrue(app.buttons["重试"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["曲目0"].exists)
@@ -215,7 +215,15 @@ extension YuyinUITests {
         let app = launch(["--ai-result", "--audio-test"])
         let audition = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "试听 ")).firstMatch
         XCTAssertTrue(audition.waitForExistence(timeout: 5))
-        for _ in 0..<3 where !audition.isHittable || audition.frame.maxY > app.frame.maxY - 160 { app.swipeUp() }
+        for _ in 0..<10 {
+            let frame = audition.frame
+            if audition.isHittable && frame.minY > 110 && frame.maxY < app.frame.maxY - 110 { break }
+            let delta = min(180, max(-180, app.frame.midY - frame.midY))
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: delta)))
+        }
+        XCTAssertGreaterThan(audition.frame.minY, 110)
+        XCTAssertLessThan(audition.frame.maxY, app.frame.maxY - 110)
         audition.tap()
         let stop = app.buttons["endAudition"]; XCTAssertTrue(stop.waitForExistence(timeout: 5)); XCTAssertTrue(stop.isHittable)
         stop.tap(); app.buttons["完成"].tap()

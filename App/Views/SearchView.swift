@@ -5,6 +5,7 @@ struct SearchView: View {
     @State private var query = ""
     @State private var kind = SearchKind.tracks
     @State private var sessions: [SearchSessionKey: SearchSession] = [:]
+    @State private var recentSessions: [SearchSessionKey] = []
     @State private var isSearching = false
     @State private var task: Task<Void, Never>?
     @State private var generation = UUID()
@@ -14,7 +15,7 @@ struct SearchView: View {
     private var result: SearchResult { session.result }
     private var didSearch: Bool { session.didSearch }
     private var error: String? { session.error }
-    private var anchor: Binding<String?> { let selected = key; return Binding(get: { sessions[selected]?.anchor }, set: { sessions[selected, default: .init()].anchor = $0 }) }
+    private var anchor: Binding<String?> { let selected = key; return Binding(get: { sessions[selected]?.anchor }, set: { if sessions[selected] != nil { sessions[selected]?.anchor = $0 } }) }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -40,7 +41,7 @@ struct SearchView: View {
                 task?.cancel(); generation = UUID(); isSearching = false
                 if !key.query.isEmpty { search(debounce: true) }
             }
-            .onChange(of: store.accountGeneration) { _, _ in task?.cancel(); generation = UUID(); sessions = [:]; query = ""; isSearching = false }
+            .onChange(of: store.accountGeneration) { _, _ in task?.cancel(); generation = UUID(); sessions = [:]; recentSessions = []; query = ""; isSearching = false }
             .onDisappear { task?.cancel(); generation = UUID(); isSearching = false }
     }
     private var discovery: some View {
@@ -65,6 +66,8 @@ struct SearchView: View {
         let requested = key; guard !requested.query.isEmpty else { return }
         let pageOffset = retry ? session.failedOffset ?? 0 : more ? session.nextOffset : 0
         task?.cancel(); let token = UUID(); generation = token; isSearching = true
+        recentSessions.removeAll { $0 == requested }; recentSessions.append(requested)
+        while recentSessions.count > 32 { sessions.removeValue(forKey: recentSessions.removeFirst()) }
         sessions[requested, default: .init()].begin()
         let account = store.accountGeneration
         task = Task {

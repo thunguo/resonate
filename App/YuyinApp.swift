@@ -21,11 +21,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         let preview = false
         #endif
+        let cookie = preview ? "" : Keychain.read("netease.cookie").flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let music: MusicService
         #if DEBUG
-        music = ProcessInfo.processInfo.arguments.contains("--search-test") ? MusicService(transport: SearchPreviewTransport()) : MusicService()
+        music = ProcessInfo.processInfo.arguments.contains("--search-test") ? MusicService(transport: SearchPreviewTransport()) : MusicService(cookie: cookie)
         #else
-        music = MusicService()
+        music = MusicService(cookie: cookie)
         #endif
         if !preview { AppDiagnostics.shared.start() }
         do { _store = State(initialValue: AppStore(persistence: try LocalPersistence(inMemory: preview), preview: preview, music: music)) }

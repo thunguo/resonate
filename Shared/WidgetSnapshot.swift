@@ -8,6 +8,13 @@ struct WidgetSnapshot: Codable {
     var updatedAt = Date()
 }
 enum SharedListening {
+    static var canSharePlayback: Bool {
+        #if PERSONAL_DEVICE
+        false
+        #else
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) != nil
+        #endif
+    }
     static let groupID = "group.space.thunguo.yuyin"
     static var defaults: UserDefaults? {
         #if PERSONAL_DEVICE

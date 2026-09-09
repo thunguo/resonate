@@ -57,7 +57,7 @@
 - **了解一首歌**：查看歌曲、专辑和音乐人的资料与来源，先阅读简短导读，资料与来源按需展开；继续追问时保留旧回答，取消后保留未完成正文及原问题。
 - **选择自己的模型**：支持 DeepSeek、阿里百炼、Kimi、智谱及自定义 OpenAI 兼容接口。模型功能按需启用，API Key 保存在设备 Keychain，请求从手机直接发送到所选服务。
 
-当前为 **0.3.3 开发版本**。离线下载尚未开放；小组件、快捷指令及 CarPlay 的能力边界见 [开发说明](Docs/DEVELOPMENT.md#系统能力)。
+当前为 **0.3.4 开发版本**。离线下载尚未开放；小组件、快捷指令及 CarPlay 的能力边界见 [开发说明](Docs/DEVELOPMENT.md#系统能力)。
 
 ## 在 Mac 上构建并安装到 iPhone
 
@@ -87,7 +87,7 @@ open Yuyin.xcodeproj
 5. 在 iPhone 的 **设置 → 隐私与安全性 → 开发者模式** 中启用开发者模式，按提示重启并确认。若没有该选项，先在 Xcode 中完成设备配对。
 6. 在 Xcode 顶部选择自己的 iPhone 作为运行设备，点击 **Run**（⌘R）。Xcode 会完成签名、构建、安装和启动。
 
-`PersonalRelease` 使用发布优化，适合日常真机使用；需要调试时可选择 `PersonalDevice`。两种个人配置均不请求 App Groups 或 CarPlay 权限。它的小组件可打开 App，但不能共享实时播放摘要。
+`PersonalRelease` 使用发布优化，适合日常真机使用；需要调试时可选择 `PersonalDevice`。两种个人配置均不请求 App Groups 或 CarPlay 权限。个人配置的小组件明确提供“打开应用继续听”，不显示实时播放状态。
 
 设备配对、签名和开发者模式的详细说明见 Apple 的 [真机运行指南](https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices) 与 [开发者模式指南](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)。
 

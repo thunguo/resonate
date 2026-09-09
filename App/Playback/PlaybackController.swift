@@ -37,6 +37,7 @@ struct PlaybackSnapshot: Equatable {
     private(set) var duration: Double = 0
     private(set) var resource: PlaybackResource?
     private(set) var error: String?
+    private(set) var operationError: String?
     private(set) var sleepDate: Date?
     private(set) var isInterrupted = false
     @ObservationIgnored private var seekTask: Task<Void, Never>?
@@ -134,7 +135,7 @@ struct PlaybackSnapshot: Equatable {
         previousQueue = auditionReturn?.queue ?? queue; auditionReturn = nil; isAuditioning = false; queue.replace(tracks, startingAt: index, origin: origin); retryCount = 0; loadCurrent()
     }
     @discardableResult func beginAudition(_ track: Track) -> Bool {
-        guard !restorationPending else { error = "队列正在恢复，请稍后试听。"; return false }
+        guard !restorationPending else { operationError = "队列正在恢复，请稍后试听。"; return false }
         if auditionReturn == nil { save(); auditionReturn = .init(queue: restorableQueue, playing: wantsPlayback, previousQueue: previousQueue) }
         isAuditioning = true; queue.replace([track], origin: .ai); retryCount = 0; loadCurrent(); return true
     }
@@ -207,8 +208,9 @@ struct PlaybackSnapshot: Equatable {
     }
     func enqueue(_ tracks: [Track], next: Bool = false) { if isAuditioning { endAudition() }; if restorationPending { pendingAppends.append((tracks, next)); return }; previousQueue = queue; queue.append(tracks, next: next); save() }
     @discardableResult func apply(_ arrangement: Arrangement) -> Bool {
+        operationError = nil
+        if let signature = arrangement.queueSignature, signature != restorableQueue.arrangementSignature { operationError = "队列已经变化，请重新编排后再应用。"; return false }
         if isAuditioning { endAudition() }
-        if let signature = arrangement.queueSignature, signature != queue.arrangementSignature { error = "队列已经变化，请重新编排后再应用。"; return false }
         previousQueue = queue; queue.applyArrangement(arrangement.tracks); save(); return true
     }
     func undo() {
@@ -219,7 +221,7 @@ struct PlaybackSnapshot: Equatable {
         if changedCurrent { loadCurrent(startPlaying: wantsPlayback) } else { save() }
     }
     func clear() {
-        auditionReturn = nil; isAuditioning = false
+        auditionReturn = nil; isAuditioning = false; operationError = nil
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
         seekTask?.cancel(); isSeeking = false; isInterrupted = false; preparationMeasurement?.end(.cancelled); preparationMeasurement = nil; bufferingMeasurement?.end(.cancelled); bufferingMeasurement = nil
         loadingTask?.cancel(); prefetchTask?.cancel(); prefetched = nil; loadID = UUID(); player.pause(); player.removeAllItems()

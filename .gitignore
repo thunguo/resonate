@@ -6,6 +6,8 @@
 .vscode/
 *.swp
 *.swo
+__pycache__/
+*.pyc
 *~
 
 # Xcode and Swift build output

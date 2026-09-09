@@ -22,6 +22,7 @@ struct ArrangementView: View {
     @State private var generation = UUID()
     @State private var excludedIDs = Set<Int64>()
     @State private var restored = false
+    @State private var resultAccountID: UUID?
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -58,12 +59,13 @@ struct ArrangementView: View {
                 .sheet(isPresented: $settings) { NavigationStack { AISettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { settings = false } } } } }
                 .sheet(isPresented: Binding(get: { store.showLogin && !settings }, set: { store.showLogin = $0 })) { LoginView() }
         }.onAppear {
-            guard !restored else { return }; restored = true; prompt = initialPrompt
+            guard !restored else { return }; restored = true; prompt = initialPrompt; resultAccountID = store.accountGeneration
             if let saved = store.recentArrangements.first(where: { adjustingQueue ? $0.queueSignature == store.player.queue.arrangementSignature : $0.queueSignature == nil }) {
                 arrangement = saved; self.saved = saved.saveConfirmed == true; createdPlaylist = saved.savedPlaylist; createUncertain = saved.creationUncertain == true
                 if prompt.isEmpty { prompt = saved.intent.constraints }
             }
-        }.onDisappear { cancel(); store.player.endAudition() }.interactiveDismissDisabled(saving)
+        }.onChange(of: store.accountGeneration) { _, _ in cancel(); arrangement = nil; saved = false; createdPlaylist = nil; dismiss() }
+        .onDisappear { cancel(); store.player.endAudition() }.interactiveDismissDisabled(saving)
     }
     private var suggestions: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -83,7 +85,7 @@ struct ArrangementView: View {
             ForEach(result.notes ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(Palette.secondary) }
             Text(result.explanation).font(.subheadline).foregroundStyle(Palette.secondary).lineSpacing(4)
             HStack(spacing: 14) {
-                FilledButton(title: adjustingQueue ? "应用到接下来" : "播放整组", symbol: "play.fill") { if adjustingQueue { guard store.player.apply(result) else { error = store.player.error; return } } else { store.player.play(result.tracks, origin: .ai) }; store.recordAIApplication(); if adjustingQueue { store.notify("队列已更新，可撤销") } }
+                FilledButton(title: adjustingQueue ? "应用到接下来" : "播放整组", symbol: "play.fill") { if adjustingQueue { guard store.player.apply(result) else { error = store.player.operationError; return } } else { store.player.play(result.tracks, origin: .ai) }; store.recordAIApplication(); if adjustingQueue { store.notify("队列已更新，可撤销") } }
                 IconButton(symbol: "text.append", label: "加入队列") { store.player.enqueue(result.tracks); store.notify("已加入队列") }
             }
             ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) { ForEach(["少些人声", "更熟悉", "换几首"], id: \.self) { adjustment in Button { if adjustment == "换几首" { excludedIDs.formUnion(result.tracks.suffix(min(3, result.tracks.count)).map(\.id)) }; prompt = String(prompt.prefix(1200)) + "；" + adjustment; generate() } label: { Text(adjustment).font(.subheadline).padding(.horizontal, 14).frame(minHeight: 44).background(Palette.surface, in: Capsule()) }.buttonStyle(.plain).disabled(progress != nil) } } }
@@ -115,27 +117,28 @@ struct ArrangementView: View {
             do {
                 let intelligence = try MusicIntelligence(music: store.music, provider: store.provider())
                 progress = "开始编排…"
-                let result = try await intelligence.arrange(request: request, library: store.library.likedTracks, discoveries: store.discoveries, preferences: store.preferences.musicTaste, context: context) { message in await MainActor.run { if generation == token { progress = message } } }
-                try Task.checkCancellation(); guard token == generation, accountID == store.accountGeneration else { return }; arrangement = result; saved = false; saveMessage = nil; createdPlaylist = nil; createUncertain = false; editingPrompt = false; store.saveArrangement(result); store.recordAIGeneration()
-            } catch is CancellationError { } catch { if token == generation { self.error = error.localizedDescription } }
+                let result = try await intelligence.arrange(request: request, library: store.library.likedTracks, discoveries: store.discoveries, preferences: store.preferences.musicTaste, context: context) { message in await MainActor.run { if generation == token && accountID == store.accountGeneration { progress = message } } }
+                try Task.checkCancellation(); guard token == generation, accountID == store.accountGeneration else { return }; arrangement = result; saved = false; saveMessage = nil; createdPlaylist = nil; createUncertain = false; editingPrompt = false; store.saveArrangement(result, for: accountID); store.recordAIGeneration()
+            } catch is CancellationError { } catch { if token == generation && accountID == store.accountGeneration { self.error = error.localizedDescription } }
             if token == generation { progress = nil }
         }
     }
     private func persistResultSave() {
-        guard var result = arrangement else { return }
+        guard var result = arrangement, let resultAccountID, resultAccountID == store.accountGeneration else { return }
         result.savedPlaylist = createdPlaylist; result.saveConfirmed = saved; result.creationUncertain = createUncertain
-        arrangement = result; store.saveArrangement(result)
+        arrangement = result; store.saveArrangement(result, for: resultAccountID)
     }
     private func save(_ result: Arrangement) {
         guard store.requireLogin() else { return }; saving = true; let accountID = store.accountGeneration
-        Task { defer { saving = false }
+        Task { defer { if store.accountGeneration == accountID { saving = false } }
             do {
-                if createdPlaylist == nil { createdPlaylist = try await store.createPlaylistNamed(result.title); persistResultSave() }
+                if createdPlaylist == nil { let playlist = try await store.createPlaylistNamed(result.title); guard store.accountGeneration == accountID else { return }; createdPlaylist = playlist; persistResultSave() }
                 guard let playlist = createdPlaylist, store.accountGeneration == accountID else { return }
                 try await store.music.editPlaylist(playlist.id, tracks: result.displayedTracks.map(\.id), adding: true)
                 guard store.accountGeneration == accountID else { return }
                 saved = true; persistResultSave(); store.recordAISave(); saveMessage = "已保存为私人歌单。"; await store.syncLibrary()
             } catch {
+                guard store.accountGeneration == accountID else { return }
                 createUncertain = createdPlaylist == nil; persistResultSave()
                 saveMessage = createdPlaylist == nil ? "创建结果未确认。请在音乐库核对上次创建的歌单，再重试保存。" : "歌单已创建，但歌曲添加未完成。重试会核对已有曲目。"
                 self.error = error.localizedDescription
@@ -208,7 +211,8 @@ struct ExplanationView: View {
                     do { for try await items in store.repository.updates([Track].self, key: store.accountKey("cache.similar.\(track.id)"), lifetime: Freshness.metadata, fetch: { [music = store.music, track] in try await music.similarTracks(track.id) }) { related = items } } catch { }
                 }
                 .sheet(isPresented: Binding(get: { store.showLogin && !settings }, set: { store.showLogin = $0 })) { LoginView() }
-        }.onDisappear { if generating { error = "导读未完成，已保留收到的内容。" }; task?.cancel(); saveCurrentExplanation() }
+        }.onChange(of: store.accountGeneration) { _, _ in task?.cancel(); explanationGeneration = UUID(); generating = false; response = ""; draftResponse = ""; sources = []; related = []; dismiss() }
+        .onDisappear { if generating { error = "导读未完成，已保留收到的内容。" }; task?.cancel(); saveCurrentExplanation() }
     }
     private func saveCurrentExplanation() {
         guard (!response.isEmpty || !draftResponse.isEmpty || !draftQuestion.isEmpty), explanationAccountID == store.accountGeneration else { return }

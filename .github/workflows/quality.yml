@@ -1,0 +1,73 @@
+name: Quality
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["Docs/**", "Screenshots/**", "README.md"]
+  pull_request:
+    paths-ignore: ["Docs/**", "Screenshots/**", "README.md"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core:
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Verify toolchain
+        run: xcodebuild -version | tee toolchain.txt && grep -Fx 'Xcode 26.6' toolchain.txt
+      - name: Core regression
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          swift test --package-path Packages/MusicCore 2>&1 | tee build/core-tests.log
+          python3 Scripts/check-test-results.py swift build/core-tests.log --minimum 65
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Verify toolchain and create simulator
+        run: |
+          xcodebuild -version | tee toolchain.txt
+          grep -Fx 'Xcode 26.6' toolchain.txt
+          YY_SIMULATOR_ID=$(xcrun simctl create 'Music CI' com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5)
+          echo "YY_SIMULATOR_ID=$YY_SIMULATOR_ID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$YY_SIMULATOR_ID"
+          xcrun simctl bootstatus "$YY_SIMULATOR_ID" -b
+      - name: Native regression
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild -project Yuyin.xcodeproj -scheme Yuyin -configuration Debug \
+            -destination "platform=iOS Simulator,id=$YY_SIMULATOR_ID" \
+            -derivedDataPath build/DerivedData -resultBundlePath build/Native.xcresult \
+            -parallel-testing-enabled NO -only-testing:YuyinTests CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/native-tests.log
+          python3 Scripts/check-test-results.py xcode build/Native.xcresult --minimum 29
+      - name: Interface regression
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project Yuyin.xcodeproj -scheme Yuyin -configuration Debug \
+            -destination "platform=iOS Simulator,id=$YY_SIMULATOR_ID" \
+            -derivedDataPath build/DerivedData -resultBundlePath build/Interface.xcresult \
+            -parallel-testing-enabled NO -only-testing:YuyinUITests CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/interface-tests.log
+          python3 Scripts/check-test-results.py xcode build/Interface.xcresult --minimum 16
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: interface-and-native-results
+          path: |
+            build/*.xcresult
+            build/*-tests.log
+          retention-days: 7

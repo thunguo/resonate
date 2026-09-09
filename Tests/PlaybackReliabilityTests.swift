@@ -88,3 +88,19 @@ extension PlaybackReliabilityTests {
         XCTAssertNil(p.current); XCTAssertFalse(p.isAuditioning); XCTAssertTrue(p.restorableQueue.entries.isEmpty)
     }
 }
+
+extension PlaybackReliabilityTests {
+    func testStaleArrangementDoesNotStopAuditionOrChangePlaybackState() async throws {
+        let p = controller(); defer { p.clear() }
+        p.play([track(1), track(2)])
+        let playing = await wait { p.isPlaying }; XCTAssertTrue(playing)
+        var candidate = track(3); candidate.availability = .full
+        var arrangement = try ArrangementValidator.build(.init(title: "测试", explanation: "", trackIDs: [3]), candidates: [candidate], likedIDs: [3], intent: .init(allowDiscovery: false))
+        arrangement.queueSignature = "expired"
+        p.beginAudition(track(4))
+        let audition = await wait { p.isPlaying }; XCTAssertTrue(audition)
+        XCTAssertFalse(p.apply(arrangement)); XCTAssertNotNil(p.operationError)
+        XCTAssertTrue(p.isAuditioning); XCTAssertEqual(p.current?.id, 4); XCTAssertEqual(p.snapshot.phase, .playing)
+        p.endAudition(); XCTAssertEqual(p.current?.id, 1)
+    }
+}

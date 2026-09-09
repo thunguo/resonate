@@ -1,0 +1,15 @@
+name: 体验建议
+description: 提出与听歌、浏览或使用习惯有关的改进
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: 在什么场景遇到不顺手
+      description: 描述想完成的事情，以及当前哪里让你停了下来。
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: 希望如何改善
+      description: 可以附草图或同一操作前后的对照。

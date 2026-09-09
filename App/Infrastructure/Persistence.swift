@@ -12,10 +12,13 @@ import MusicCore
 @MainActor final class LocalPersistence {
     let container: ModelContainer
     let context: ModelContext
+    let isInMemory: Bool
     private(set) var blockedKeys = Set<String>()
     init(inMemory: Bool = false) throws {
-        if !inMemory { try FileManager.default.createDirectory(at: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0], withIntermediateDirectories: true) }
-        container = try ModelContainer(for: StoredRecord.self, StoredTrack.self, configurations: ModelConfiguration(isStoredInMemoryOnly: inMemory))
+        isInMemory = inMemory
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
+        if !inMemory { try FileManager.default.createDirectory(at: configuration.url.deletingLastPathComponent(), withIntermediateDirectories: true) }
+        container = try ModelContainer(for: StoredRecord.self, StoredTrack.self, configurations: configuration)
         context = ModelContext(container)
     }
     func load<T: Decodable>(_ type: T.Type, key: String) -> T? {

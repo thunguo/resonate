@@ -18,7 +18,10 @@ private struct DiagnosticDocument: FileDocument {
 struct DiagnosticsView: View {
     @State private var document = DiagnosticDocument(data: Data())
     @State private var preview = ""
-    @State private var count = 0
+    @State private var records: [DiagnosticRecord] = []
+    @State private var page = 0
+    private var count: Int { records.count }
+    private var pageCount: Int { max(1, (count + 49) / 50) }
     @State private var exporting = false
     @State private var error: String?
     private var version: String {
@@ -41,6 +44,13 @@ struct DiagnosticsView: View {
             Section {
                 LabeledContent("记录", value: "\(count) 条")
                 DisclosureGroup("预览导出内容") {
+                    HStack {
+                        Button("上一页") { page -= 1 }.disabled(page == 0).frame(minHeight: 44)
+                        Spacer()
+                        Text("\(page + 1) / \(pageCount)").font(.caption).monospacedDigit()
+                        Spacer()
+                        Button("下一页") { page += 1 }.disabled(page + 1 >= pageCount).frame(minHeight: 44)
+                    }.buttonStyle(.borderless)
                     Text(preview).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 }
                 Button("导出诊断", systemImage: "square.and.arrow.up") { exporting = true }.disabled(count == 0)
@@ -54,14 +64,25 @@ struct DiagnosticsView: View {
             if let error { Section { InlineError(message: error) } }
         }.scrollContentBackground(.hidden).cabinetBackground().navigationTitle("诊断与反馈").navigationBarTitleDisplayMode(.inline)
             .task { await refresh() }
+            .task(id: page) { await refreshPreview() }
             .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "余音诊断") { result in
                 if case .failure = result { error = "未能导出诊断，请重试。" }
             }
+    }
+    private func refreshPreview() async {
+        let selected = page
+        let slice = Array(records.dropFirst(selected * 50).prefix(50))
+        let export = DiagnosticExport(version: version, system: UIDevice.current.systemVersion, environment: environment, records: slice)
+        let text = await Task.detached {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
+            return (try? encoder.encode(export)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+        }.value
+        guard !Task.isCancelled, selected == page else { return }; preview = text
     }
     private func refresh() async {
         let records = await DiagnosticRecorder.shared.snapshot()
         let export = DiagnosticExport(version: version, system: UIDevice.current.systemVersion, environment: environment, records: records)
         let data = await Task.detached { let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601; return (try? encoder.encode(export)) ?? Data() }.value
-        count = records.count; document = .init(data: data); preview = String(decoding: data, as: UTF8.self)
+        self.records = records; document = .init(data: data); page = 0; await refreshPreview()
     }
 }

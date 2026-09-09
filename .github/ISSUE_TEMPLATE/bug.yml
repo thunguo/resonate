@@ -1,0 +1,32 @@
+name: 使用问题
+description: 报告可复现的播放、收藏、AI 或界面问题
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: 请勿粘贴 API Key、Cookie、账号、私人歌单或完整网络请求。诊断可在设置中预览后自行决定是否附上。
+  - type: input
+    id: environment
+    attributes:
+      label: 版本与设备
+      placeholder: 余音版本、iPhone 型号、iOS 版本、构建配置
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 怎么重现
+      description: 按操作顺序说明；注明使用本地缓存、蜂窝或 Wi-Fi。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图或脱敏诊断（可选）
+      description: 提交前检查图片和附件，不包含私人信息。

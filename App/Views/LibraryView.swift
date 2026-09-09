@@ -82,11 +82,11 @@ struct LibraryView: View {
             if store.library.playlists.isEmpty { EmptyState(symbol: "music.note.list", title: "留一张歌单", detail: "同步网易云歌单，或将一段新的听歌体验保存下来。") }
         case .albums:
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 20)], spacing: 24) {
-                ForEach(albums) { album in NavigationLink { CollectionDetailView(album: album) } label: { VStack(alignment: .leading, spacing: 8) { GeometryReader { g in Artwork(url: album.artwork, size: g.size.width) }.aspectRatio(1, contentMode: .fit); Text(album.name).font(.subheadline).lineLimit(2); Text(album.artistName).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1) } }.buttonStyle(.plain) }
-            }
+                ForEach(albums) { album in NavigationLink { CollectionDetailView(album: album) } label: { VStack(alignment: .leading, spacing: 8) { GeometryReader { g in Artwork(url: album.artwork, size: g.size.width) }.aspectRatio(1, contentMode: .fit); Text(album.name).font(.subheadline).lineLimit(2); Text(album.artistName).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1) } }.buttonStyle(.plain).id("album-\(album.id)") }
+            }.scrollTargetLayout()
             if store.library.albums.isEmpty { EmptyState(symbol: "square.stack", title: "整张专辑，完整聆听", detail: "收藏的专辑会放在这里。") }
         case .artists:
-            ForEach(artists) { artist in NavigationLink { CollectionDetailView(artist: artist) } label: { HStack(spacing: 16) { Artwork(url: artist.artwork, size: 60, radius: 30); Text(artist.name); Spacer(); Image(systemName: "chevron.right").font(.caption) } }.buttonStyle(.plain) }
+            ForEach(artists) { artist in NavigationLink { CollectionDetailView(artist: artist) } label: { HStack(spacing: 16) { Artwork(url: artist.artwork, size: 60, radius: 30); Text(artist.name); Spacer(); Image(systemName: "chevron.right").font(.caption) } }.buttonStyle(.plain).id("artist-\(artist.id)") }
             if store.library.artists.isEmpty { EmptyState(symbol: "person.crop.circle", title: "跟随喜欢的声音", detail: "关注的音乐人会放在这里。") }
         case .downloads: DownloadListContent()
         }

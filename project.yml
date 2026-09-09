@@ -16,8 +16,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.3.3"
-    CURRENT_PROJECT_VERSION: "5"
+    MARKETING_VERSION: "0.3.4"
+    CURRENT_PROJECT_VERSION: "6"
 packages:
   MusicCore:
     path: Packages/MusicCore

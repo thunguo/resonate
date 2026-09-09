@@ -16,12 +16,12 @@ struct ListeningWidgetView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack { Text("余音").font(.caption.weight(.medium)); Spacer(); Image(systemName: "waveform").font(.caption) }.foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Text(entry.snapshot.title).font(.headline).lineLimit(1)
-                Text(entry.snapshot.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(SharedListening.canSharePlayback ? entry.snapshot.title : "音乐在余音里等你").font(.headline).lineLimit(1)
+                Text(SharedListening.canSharePlayback ? entry.snapshot.artist : "打开应用，从上次继续").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
-                Button(intent: ContinueListeningIntent()) { Label("继续听", systemImage: "play.fill").font(.subheadline.weight(.medium)).frame(minHeight: 44).contentShape(Rectangle()) }.buttonStyle(.plain)
+                Button(intent: ContinueListeningIntent()) { Label(SharedListening.canSharePlayback ? "继续听" : "打开应用继续听", systemImage: "play.fill").font(.subheadline.weight(.medium)).frame(minHeight: 44).contentShape(Rectangle()) }.buttonStyle(.plain)
             }
-            if family == .systemMedium && !entry.snapshot.playlists.isEmpty {
+            if SharedListening.canSharePlayback && family == .systemMedium && !entry.snapshot.playlists.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("常听歌单").font(.caption).foregroundStyle(.secondary)
                     ForEach(entry.snapshot.playlists.prefix(2)) { playlist in Link(destination: URL(string: "yuyin://playlist?id=\(playlist.id)")!) { Text(playlist.name).font(.subheadline).lineLimit(2).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle()) } }

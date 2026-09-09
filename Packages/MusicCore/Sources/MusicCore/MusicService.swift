@@ -50,8 +50,8 @@ public actor MusicService {
     private var cookie = ""
     private var sessionRevision = UUID()
     private var pendingRequests: [UUID: Task<(Data, HTTPURLResponse), Error>] = [:]
-    public init(baseURL: URL = URL(string: "https://music.thunguo.space")!, transport: any HTTPTransport = PrivateTransport()) { self.baseURL = baseURL; self.transport = transport }
-    public func setCookie(_ value: String) { pendingRequests.values.forEach { $0.cancel() }; pendingRequests = [:]; cookie = value; sessionRevision = UUID() }
+    public init(baseURL: URL = URL(string: "https://music.thunguo.space")!, transport: any HTTPTransport = PrivateTransport(), cookie: String = "") { self.baseURL = baseURL; self.transport = transport; self.cookie = cookie }
+    public func setCookie(_ value: String) { guard value != cookie else { return }; pendingRequests.values.forEach { $0.cancel() }; pendingRequests = [:]; cookie = value; sessionRevision = UUID() }
     public func request(_ path: String, parameters: [String: JSONValue] = [:], authenticated: Bool = false) async throws -> JSONValue {
         guard baseURL.scheme == "https", baseURL.host != nil else { throw MusicError.invalidConfiguration("音乐服务地址需要使用 HTTPS。") }
         if authenticated && cookie.isEmpty { throw MusicError.loginRequired }

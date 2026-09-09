@@ -49,16 +49,21 @@ public struct QueueState: Codable, Equatable, Sendable {
             else if offset < lastPinnedIndex { tail.append(entry) }
         }
         tail.append(contentsOf: replacements)
-        entries = Array(entries.prefix(index + 1)) + tail
+        entries = Array(entries.prefix(index + 1)) + tail; pruneNavigation()
     }
     @discardableResult public mutating func advance(manual: Bool = false) -> Bool {
+        var generator = SystemRandomNumberGenerator()
+        return advance(manual: manual, using: &generator)
+    }
+    @discardableResult public mutating func advance<R: RandomNumberGenerator>(manual: Bool = false, using generator: inout R) -> Bool {
         guard let i = currentIndex else { return false }
         if repeatMode == .one && !manual { position = 0; return true }
         if shuffle, entries.count > 1 {
             if let currentID { shuffleVisited.insert(currentID) }
             var choices = entries.filter { !shuffleVisited.contains($0.id) }
             if choices.isEmpty && repeatMode == .all { shuffleVisited = Set([currentID].compactMap { $0 }); choices = entries.filter { $0.id != currentID } }
-            guard let next = choices.randomElement() else { return false }
+            let immediate = entries.indices.contains(i + 1) && entries[i + 1].pinned && !shuffleVisited.contains(entries[i + 1].id) ? entries[i + 1] : nil
+            guard let next = immediate ?? choices.randomElement(using: &generator) else { return false }
             if let currentID { navigationHistory.append(currentID) }
             currentID = next.id; position = 0; return true
         }
@@ -72,7 +77,11 @@ public struct QueueState: Codable, Equatable, Sendable {
         if shuffle, let previous = navigationHistory.popLast(), entries.contains(where: { $0.id == previous }) { if let currentID { shuffleVisited.remove(currentID) }; currentID = previous; position = 0; return }
         currentID = entries[max(0, i - 1)].id; position = 0
     }
-    public mutating func remove(_ id: UUID) { guard id != currentID else { return }; entries.removeAll { $0.id == id } }
+    public mutating func remove(_ id: UUID) { guard id != currentID else { return }; entries.removeAll { $0.id == id }; pruneNavigation() }
+    private mutating func pruneNavigation() {
+        let identities = Set(entries.map(\.id))
+        shuffleVisited.formIntersection(identities); navigationHistory.removeAll { !identities.contains($0) }
+    }
     public mutating func moveUpcoming(from offsets: IndexSet, to destination: Int) {
         var tail = upcoming
         let moving = offsets.sorted().compactMap { tail.indices.contains($0) ? tail[$0] : nil }
