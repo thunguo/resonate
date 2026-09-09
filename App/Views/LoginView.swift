@@ -22,8 +22,8 @@ struct LoginView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    Image(systemName: "music.note.house").font(.system(size: 40, weight: .ultraLight)).foregroundStyle(Palette.accent).padding(.top, 18)
-                    VStack(alignment: .leading, spacing: 12) { Text("带上你的音乐。").font(.largeTitle.weight(.medium)); Text("连接网易云音乐，找回喜欢的歌、歌单和专辑。").foregroundStyle(Palette.secondary).lineSpacing(5) }
+                    Image("BrandMark").resizable().frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 15)).accessibilityLabel("余音").padding(.top, 12)
+                    VStack(alignment: .leading, spacing: 12) { Text("带上你的音乐").font(.largeTitle.weight(.semibold)); Text("连接网易云音乐，找回喜欢的歌、歌单和专辑。").foregroundStyle(Palette.secondary).lineSpacing(5) }
                     Picker("登录方式", selection: $mode) { Text("验证码").tag(0); Text("扫码登录").tag(1) }.pickerStyle(.segmented)
                     if mode == 0 { smsForm } else { qrForm }
                     if let error { InlineError(message: error) }

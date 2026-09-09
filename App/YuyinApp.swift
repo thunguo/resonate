@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 if let store { RootView().environment(store).preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--dark") ? .dark : store.colorScheme).task { await store.start() }.onOpenURL { store.handleURL($0) } }
                 else { ContentUnavailableView("暂时无法打开余音", systemImage: "externaldrive.badge.exclamationmark", description: Text(startupError ?? "请重试。")) }
             }
-            .onChange(of: phase) { _, value in if value != .active { store?.player.save() } }
+            .onChange(of: phase) { _, value in if value != .active { store?.preheater.stop(); store?.player.save() } else { Task { await store?.becameActive() } } }
         }
     }
 }

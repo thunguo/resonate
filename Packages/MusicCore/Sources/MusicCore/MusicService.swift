@@ -136,11 +136,29 @@ public actor MusicService {
         let byID = Dictionary(result.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ids.map { byID[$0] ?? Track(id: $0, title: "暂时无法读取的歌曲", artists: [], album: .init(id: 0, name: ""), duration: 0, availability: .unavailable) }
     }
-    public func playlistTracks(_ id: Int64) async throws -> [Track] {
+    public func playlistTracks(_ id: Int64, onProgress: @escaping @Sendable ([Track]) async -> Void = { _ in }) async throws -> [Track] {
         let j = try await request("playlist/detail", parameters: ["id": .string(String(id))], authenticated: !cookie.isEmpty)
         let ids = j["playlist"]["trackIds"].array.map { Int64($0["id"].double) }
         let expectedCount = j["playlist"]["trackCount"].int
-        if !ids.isEmpty, ids.count >= expectedCount { return try await tracks(ids: ids) }
+        if !ids.isEmpty, ids.count >= expectedCount {
+            var known = Dictionary(j["playlist"]["tracks"].array.map(Track.init(json:)).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            func snapshot() -> [Track] {
+                ids.map { id in
+                    if let track = known[id] { return track }
+                    var track = Track(id: id, title: "正在读取歌曲资料", artists: [], album: .init(id: 0, name: ""), duration: 0)
+                    track.metadataPending = true; return track
+                }
+            }
+            if !known.isEmpty { await onProgress(snapshot()) }
+            let missing = ids.filter { known[$0] == nil }
+            for start in stride(from: 0, to: missing.count, by: 200) {
+                try Task.checkCancellation()
+                let batch = Array(missing[start..<min(start + 200, missing.count)])
+                for track in try await tracks(ids: batch) { known[track.id] = track }
+                await onProgress(snapshot())
+            }
+            return snapshot()
+        }
         // Some deployments omit trackIds. Paginate and reject a repeating page.
         var result: [Track] = [], seen = Set<Int64>()
         var offset = 0
@@ -179,6 +197,9 @@ public actor MusicService {
             if error as? MusicError == .loginRequired || error as? MusicError == .staleSession { throw error }
             failures.append(category + "未更新：" + error.localizedDescription)
         }
+        async let fetchedPlaylists = userPlaylists(userID)
+        async let fetchedAlbums = allPages("album/sublist", key: "data").map(Album.init(json:))
+        async let fetchedArtists = allPages("artist/sublist", key: "data").map(Artist.init(json:))
         await onProgress("正在核对喜欢的歌曲…")
         do {
             let likes = try await request("likelist", parameters: ["uid": .string(String(userID))], authenticated: true)
@@ -195,11 +216,11 @@ public actor MusicService {
             result.likedTracks = ids.map { known[$0] ?? Track(id: $0, title: "暂时无法读取的歌曲", artists: [], album: .init(id: 0, name: ""), duration: 0, availability: .unavailable) }
         } catch { try failed("喜欢的歌", error) }
         await onProgress("正在同步歌单…")
-        do { result.playlists = try await userPlaylists(userID) } catch { try failed("歌单", error) }
+        do { result.playlists = try await fetchedPlaylists } catch { try failed("歌单", error) }
         await onProgress("正在同步专辑…")
-        do { result.albums = try await allPages("album/sublist", key: "data").map(Album.init(json:)) } catch { try failed("专辑", error) }
+        do { result.albums = try await fetchedAlbums } catch { try failed("专辑", error) }
         await onProgress("正在同步音乐人…")
-        do { result.artists = try await allPages("artist/sublist", key: "data").map(Artist.init(json:)) } catch { try failed("音乐人", error) }
+        do { result.artists = try await fetchedArtists } catch { try failed("音乐人", error) }
         guard revision == sessionRevision else { throw MusicError.staleSession }
         if failures.isEmpty { result.syncedAt = .now }
         result.partialFailures = failures.isEmpty ? nil : failures

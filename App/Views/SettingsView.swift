@@ -13,7 +13,8 @@ struct SettingsView: View {
         Form {
             Section {
                 if let profile = store.profile {
-                    HStack(spacing: 14) { Artwork(url: profile.avatar, size: 48, radius: 24); VStack(alignment: .leading, spacing: 5) { Text(profile.name); Text("已连接网易云音乐").font(.caption).foregroundStyle(Palette.secondary) } }
+                    HStack(spacing: 14) { Artwork(url: profile.avatar, size: 48, radius: 24); VStack(alignment: .leading, spacing: 5) { Text(profile.name); Text(store.sessionExpired ? "需要重新登录" : "已连接网易云音乐").font(.caption).foregroundStyle(Palette.secondary) } }
+                    if store.sessionExpired { Button("重新连接") { dismiss(); store.showLogin = true } }
                     Button("重新同步收藏") { Task { await store.syncLibrary() } }.disabled(store.isSyncing)
                     Button("退出网易云账号", role: .destructive) { confirmLogout = true }
                 } else { Button("连接网易云音乐") { dismiss(); store.showLogin = true } }
@@ -28,6 +29,10 @@ struct SettingsView: View {
                 Picker("外观", selection: $store.preferences.appearance) { Text("跟随系统").tag("system"); Text("浅色").tag("light"); Text("深色").tag("dark") }
                 NavigationLink("下载与存储") { ScrollView { DownloadListContent().padding(20) }.cabinetBackground().navigationTitle("下载与存储") }
             }
+            Section {
+                Toggle("智能预缓存", isOn: $store.preferences.smartPreheat)
+                LabeledContent("封面与资料", value: ByteCountFormatter.string(fromByteCount: Int64(store.cacheBytes), countStyle: .file))
+            } header: { Text("快速浏览") } footer: { Text("在 Wi-Fi 和设备状态合适时提前准备常听内容。缓存最多 300 MB，额外预热每天最多 100 MB，不下载音乐文件。") }
             Section("数据") {
                 NavigationLink("待同步更改（\(store.pendingMutations.count)）") { PendingSyncView() }
                 Button("清除本机播放与搜索记录", role: .destructive) { confirmHistory = true }
@@ -39,6 +44,8 @@ struct SettingsView: View {
             Section { HStack { Text("余音"); Spacer(); Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "").foregroundStyle(Palette.secondary) }; Text("收藏值得反复听。").foregroundStyle(Palette.secondary) }
         }.scrollContentBackground(.hidden).cabinetBackground().navigationTitle("设置").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .task { await store.updateCacheUsage() }
+            .onChange(of: store.preferences.smartPreheat) { _, _ in store.savePreferences(); store.schedulePreheat() }
             .onChange(of: store.preferences.quality) { _, _ in store.savePreferences() }
             .onChange(of: store.preferences.wifiOnly) { _, _ in store.savePreferences() }
             .onChange(of: store.preferences.appearance) { _, _ in store.savePreferences() }

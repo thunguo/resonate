@@ -11,33 +11,22 @@ struct LibraryView: View {
     @State private var filter = ""
     @State private var newPlaylist = false
     private var sort: LibrarySort { store.preferences.librarySort[section.rawValue] ?? .original }
-    private func sorted<T>(_ items: [T], name: (T) -> String, artist: (T) -> String = { _ in "" }) -> [T] {
-        guard sort != .original else { return items }
-        return items.enumerated().sorted { lhs, rhs in
-            let a = sort == .artist ? artist(lhs.element) + name(lhs.element) : name(lhs.element)
-            let b = sort == .artist ? artist(rhs.element) + name(rhs.element) : name(rhs.element)
-            let order = a.localizedStandardCompare(b)
-            return order == .orderedSame ? lhs.offset < rhs.offset : order == .orderedAscending
-        }.map(\.element)
-    }
-    var filteredTracks: [Track] { sorted(store.library.likedTracks.filter { filter.isEmpty || ($0.title + $0.artistName + $0.album.name).localizedCaseInsensitiveContains(filter) }, name: { $0.title }, artist: { $0.artistName }) }
-    private var playlists: [Playlist] {
-        let items = sorted(store.library.playlists.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }, name: { $0.name })
-        return items.filter { store.preferences.pinnedPlaylists.contains($0.id) } + items.filter { !store.preferences.pinnedPlaylists.contains($0.id) }
-    }
-    private var albums: [Album] { sorted(store.library.albums.filter { filter.isEmpty || ($0.name + $0.artistName).localizedCaseInsensitiveContains(filter) }, name: { $0.name }, artist: { $0.artistName }) }
-    private var artists: [Artist] { sorted(store.library.artists.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }, name: { $0.name }) }
+    @State private var filteredTracks: [Track] = []
+    @State private var playlists: [Playlist] = []
+    @State private var albums: [Album] = []
+    @State private var artists: [Artist] = []
+    private var filterKey: String { "\(store.libraryRevision)|\(filter)|\(section)|\(sort)|\(store.preferences.pinnedPlaylists.sorted())" }
     private var matchCount: Int { switch section { case .favorites: return filteredTracks.count; case .playlists: return playlists.count; case .albums: return albums.count; case .artists: return artists.count; case .downloads: return 1 } }
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .firstTextBaseline) { VStack(alignment: .leading, spacing: 8) { Eyebrow(text: store.profile?.name ?? "私人音乐藏馆"); Text("音乐库").font(.largeTitle.weight(.medium)) }; Spacer(); IconButton(symbol: "slider.horizontal.3", label: "设置") { store.showSettings = true }.accessibilityIdentifier("settingsButton") }
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .firstTextBaseline) { Text("音乐库").font(.largeTitle.weight(.semibold)); Spacer(); IconButton(symbol: "slider.horizontal.3", label: "设置") { store.showSettings = true }.accessibilityIdentifier("settingsButton") }
                 if !store.isLoggedIn && !store.previewMode {
                     Button { store.showLogin = true } label: { HStack { Image(systemName: "person.crop.circle"); Text("连接网易云，带上你的收藏"); Spacer(); Image(systemName: "arrow.up.right") }.font(.subheadline).padding(16).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain)
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(LibrarySection.allCases) { item in Button { section = item } label: { Text(item.rawValue).font(.subheadline.weight(section == item ? .semibold : .regular)).padding(.horizontal, 16).frame(minHeight: 44).foregroundStyle(section == item ? Palette.background : Palette.secondary).background(section == item ? Palette.accent : Palette.surface.opacity(0.5), in: Capsule()) }.buttonStyle(.plain) }
+                        ForEach(LibrarySection.allCases) { item in Button { section = item } label: { Text(item.rawValue).font(.body.weight(section == item ? .semibold : .regular)).padding(.horizontal, 10).frame(minHeight: 44).foregroundStyle(section == item ? Palette.text : Palette.secondary).overlay(alignment: .bottom) { if section == item { Capsule().fill(Palette.accent).frame(height: 2) } } }.buttonStyle(.plain) }
                     }
                 }
                 if section != .downloads {
@@ -50,7 +39,7 @@ struct LibraryView: View {
                         } } label: { Image(systemName: "arrow.up.arrow.down").frame(width: 44, height: 44) }.accessibilityLabel("排序")
                     }.padding(.leading, 12).background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
                 }
-                if store.isSyncing { ProgressView(store.syncProgress).font(.subheadline) }
+                if store.isSyncing && store.library.likedTracks.isEmpty { DelayedProgress(title: store.syncProgress) }
                 if let error = store.syncError { InlineError(message: "部分收藏未更新，已保留相应的上次资料。\n" + error) { Task { await store.syncLibrary() } } }
                 if !store.pendingMutations.isEmpty { NavigationLink { PendingSyncView() } label: { Label("\(store.pendingMutations.count) 项更改待同步", systemImage: "arrow.triangle.2.circlepath").font(.subheadline) } }
                 if store.pendingCreation != nil { Button("核对上次创建的歌单") { newPlaylist = true }.frame(minHeight: 44) }
@@ -58,6 +47,12 @@ struct LibraryView: View {
                 if !filter.isEmpty, matchCount == 0 { Text("没有找到匹配的收藏").font(.subheadline).foregroundStyle(Palette.secondary).padding(.vertical, 20) }
             }.padding(20)
         }.cabinetBackground().toolbar(.hidden, for: .navigationBar).refreshable { await store.syncLibrary() }
+        .task(id: filterKey) {
+            let library = store.library, query = filter, order = sort, pinned = store.preferences.pinnedPlaylists
+            let value = await Task.detached(priority: .userInitiated) { LibraryDisplay.make(library, query: query, order: order, pinned: pinned) }.value
+            guard !Task.isCancelled else { return }
+            filteredTracks = value.tracks; playlists = value.playlists; albums = value.albums; artists = value.artists
+        }
         .onChange(of: section) { _, _ in filter = "" }
         .sheet(isPresented: $newPlaylist) { PlaylistCreationView() }
 
@@ -65,9 +60,12 @@ struct LibraryView: View {
     @ViewBuilder private var content: some View {
         switch section {
         case .favorites:
-            Text("\(filteredTracks.count) 首喜欢").font(.subheadline).foregroundStyle(Palette.secondary)
             if !store.library.likedTracks.isEmpty {
-                FilledButton(title: "播放喜欢的歌", symbol: "play.fill") { store.player.play(filteredTracks) }.disabled(filteredTracks.isEmpty)
+                HStack {
+                    Text("\(filteredTracks.count) 首喜欢").font(.subheadline).foregroundStyle(Palette.secondary)
+                    Spacer()
+                    Button { store.player.play(filteredTracks) } label: { Label("播放", systemImage: "play.fill").font(.subheadline.weight(.medium)).frame(minHeight: 44) }.buttonStyle(MusicPressStyle()).disabled(filteredTracks.isEmpty)
+                }
                 LazyVStack(spacing: 0) { ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { i, track in TrackRow(track: track) { store.player.play(filteredTracks, at: i) } } }
             } else { EmptyState(symbol: "heart", title: "喜欢会慢慢积累", detail: "遇到想再听一次的歌，点一下喜欢。") }
         case .playlists:
@@ -117,4 +115,25 @@ struct DownloadListContent: View {
         }
     }
     func status(_ record: DownloadRecord) -> String { switch record.status { case .waiting: return "等待下载"; case .downloading: return "正在下载 \(Int(record.progress * 100))%"; case .paused: return "已暂停"; case .complete: return "可离线播放"; case .failed: return record.error ?? "下载失败" } }
+}
+
+private struct LibraryDisplay: Sendable {
+    var tracks: [Track]; var playlists: [Playlist]; var albums: [Album]; var artists: [Artist]
+    static func make(_ library: LibrarySnapshot, query: String, order: LibrarySort, pinned: Set<Int64>) -> Self {
+        func matches(_ text: String) -> Bool { query.isEmpty || text.localizedCaseInsensitiveContains(query) }
+        func sorted<T>(_ items: [T], name: (T) -> String, artist: (T) -> String = { _ in "" }) -> [T] {
+            guard order != .original else { return items }
+            return items.enumerated().sorted {
+                let a = order == .artist ? artist($0.element) + name($0.element) : name($0.element)
+                let b = order == .artist ? artist($1.element) + name($1.element) : name($1.element)
+                let result = a.localizedStandardCompare(b)
+                return result == .orderedSame ? $0.offset < $1.offset : result == .orderedAscending
+            }.map(\.element)
+        }
+        let lists = sorted(library.playlists.filter { matches($0.name) }, name: { $0.name })
+        return .init(tracks: sorted(library.likedTracks.filter { matches($0.title + $0.artistName + $0.album.name) }, name: { $0.title }, artist: { $0.artistName }),
+            playlists: lists.filter { pinned.contains($0.id) } + lists.filter { !pinned.contains($0.id) },
+            albums: sorted(library.albums.filter { matches($0.name + $0.artistName) }, name: { $0.name }, artist: { $0.artistName }),
+            artists: sorted(library.artists.filter { matches($0.name) }, name: { $0.name }))
+    }
 }

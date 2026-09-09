@@ -19,6 +19,7 @@
 		580779E86044D7A88E76AFA0 /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB47D2C73A843A3E8915E63 /* PlaybackController.swift */; };
 		5BD2C5AE8D9B293EDFEB942D /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D803F4B5B123E384729408B /* LoginView.swift */; };
 		5C04B8823167FFA2B41477EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF690D767DDBC9AE3D40E746 /* SettingsView.swift */; };
+		5E2D0B03423CDD71CC41FC07 /* StorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5115DC5C86628DBC53723F4C /* StorageTests.swift */; };
 		5EFEAEF8064B1225F4DCB0D4 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 737069220449E270A0156CF8 /* Theme.swift */; };
 		613B516E94CA7D10A6737951 /* PlaybackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8F265C8CB8D997BDA943ED /* PlaybackTests.swift */; };
 		616041EB2EB187798E32EEE5 /* IntelligenceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3230BA6C518D8BD0E3C5D9E /* IntelligenceViews.swift */; };
@@ -30,6 +31,7 @@
 		92DCE747032EAF27484C699C /* PlaylistCreation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2C771E5D25B87543F9E97A /* PlaylistCreation.swift */; };
 		9567FC7A4E5DC0769C1D5437 /* ListenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3668394CABC849FC035318A7 /* ListenView.swift */; };
 		9EE9D5B485D8F99037BACD8E /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F294E5478113520B84A1A87B /* LibraryView.swift */; };
+		A582CFEA1E5C7CD026FB45BA /* SmartPreheater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA453D5882BDFF102A2E230 /* SmartPreheater.swift */; };
 		B0DD91FA395AB5C1D6853A55 /* PlaylistCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C94B04B6264D0EE987A79B /* PlaylistCreationView.swift */; };
 		B52A0CE193BF7E12FDED7B7E /* MusicCore in Frameworks */ = {isa = PBXBuildFile; productRef = ED01A6E68DABB0BCE1728A9A /* MusicCore */; };
 		B86CEDA7727CA65BF2FE19B5 /* YuyinWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B9AB7931A62322D64192321 /* YuyinWidget.swift */; };
@@ -40,6 +42,7 @@
 		D89236CFC0011DC83E4091CD /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60B709CA3B42F39B4F15ABB /* AppStore.swift */; };
 		DCD3F483CD9715FA314774DD /* YuyinUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92DF69C01DE63FD2E94DEC3F /* YuyinUITests.swift */; };
 		DEDE3635AC9D95EA04F7398F /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFC780CD70A1DECD352678CA /* DownloadManager.swift */; };
+		E6483B8A71C139A72392B1E9 /* PerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBDB283C4159B3CA0C630F5 /* PerformanceTests.swift */; };
 		E8A7D2C8BF28DD4EB4B6A0FE /* ListeningShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 823FE2EFCE9EA33B2D56DFFE /* ListeningShortcuts.swift */; };
 		EA12FDDADF113D297773DE20 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ACD8D18E421CE427B8422EC /* WidgetSnapshot.swift */; };
 		F1AE07150584B29E911D37C0 /* YuyinWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 134FD8493E89039E33565AC8 /* YuyinWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -100,6 +103,7 @@
 		4A06BD6BECB9D1C3B1373F89 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4B9AB7931A62322D64192321 /* YuyinWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YuyinWidget.swift; sourceTree = "<group>"; };
 		4F7458B154C90D4967346E9F /* Yuyin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Yuyin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5115DC5C86628DBC53723F4C /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		65F555E7A9B748E5189F0802 /* PlaylistEditingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistEditingViews.swift; sourceTree = "<group>"; };
 		6ACD8D18E421CE427B8422EC /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		6E8C586A8AEED4D98E5CB170 /* ListeningIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningIntents.swift; sourceTree = "<group>"; };
@@ -111,6 +115,7 @@
 		8167222DE444581ED95F2C44 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		823FE2EFCE9EA33B2D56DFFE /* ListeningShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningShortcuts.swift; sourceTree = "<group>"; };
 		8383293CB935A7FB493A509D /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		8BA453D5882BDFF102A2E230 /* SmartPreheater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartPreheater.swift; sourceTree = "<group>"; };
 		8FB47D2C73A843A3E8915E63 /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		92DF69C01DE63FD2E94DEC3F /* YuyinUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YuyinUITests.swift; sourceTree = "<group>"; };
 		95B40A481E6456391D1FE19E /* PreviewTracks.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PreviewTracks.json; sourceTree = "<group>"; };
@@ -118,6 +123,7 @@
 		9991D0D6B9A0F139B442292E /* PreviewFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixtures.swift; sourceTree = "<group>"; };
 		A18D134BF7B4C057175EAF91 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		BF690D767DDBC9AE3D40E746 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		BFBDB283C4159B3CA0C630F5 /* PerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceTests.swift; sourceTree = "<group>"; };
 		C3230BA6C518D8BD0E3C5D9E /* IntelligenceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntelligenceViews.swift; sourceTree = "<group>"; };
 		CE8F265C8CB8D997BDA943ED /* PlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackTests.swift; sourceTree = "<group>"; };
 		DFC780CD70A1DECD352678CA /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
@@ -168,7 +174,9 @@
 		49DE3101CD1C55BC16E81F15 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				BFBDB283C4159B3CA0C630F5 /* PerformanceTests.swift */,
 				CE8F265C8CB8D997BDA943ED /* PlaybackTests.swift */,
+				5115DC5C86628DBC53723F4C /* StorageTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -186,6 +194,7 @@
 				8167222DE444581ED95F2C44 /* Persistence.swift */,
 				6F2C771E5D25B87543F9E97A /* PlaylistCreation.swift */,
 				9991D0D6B9A0F139B442292E /* PreviewFixtures.swift */,
+				8BA453D5882BDFF102A2E230 /* SmartPreheater.swift */,
 			);
 			path = Infrastructure;
 			sourceTree = "<group>";
@@ -456,6 +465,7 @@
 				CAE8814444799537F74658A5 /* RootView.swift in Sources */,
 				295E6EB8958C0B568DEE4877 /* SearchView.swift in Sources */,
 				5C04B8823167FFA2B41477EE /* SettingsView.swift in Sources */,
+				A582CFEA1E5C7CD026FB45BA /* SmartPreheater.swift in Sources */,
 				5EFEAEF8064B1225F4DCB0D4 /* Theme.swift in Sources */,
 				F44F6548A1FC0E39640A596A /* WidgetSnapshot.swift in Sources */,
 				54F9076D62C7B95E5F97A2ED /* YuyinApp.swift in Sources */,
@@ -484,7 +494,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6483B8A71C139A72392B1E9 /* PerformanceTests.swift in Sources */,
 				613B516E94CA7D10A6737951 /* PlaybackTests.swift in Sources */,
+				5E2D0B03423CDD71CC41FC07 /* StorageTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -509,6 +521,23 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0047F97302D08527F5BD5305 /* PersonalRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = space.thunguo.yuyin.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Yuyin;
+			};
+			name = PersonalRelease;
+		};
 		3305AEFDB4C97E6F928D57E4 /* PersonalDevice */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -559,6 +588,25 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Yuyin.app/Yuyin";
 			};
 			name = Release;
+		};
+		45753C91776B86F755C6BDFF /* PersonalRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/PersonalDevice.entitlements;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = space.thunguo.yuyin.widget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PERSONAL_DEVICE";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = PersonalRelease;
 		};
 		459EDA6DBD7F30FC3B484E31 /* CarPlay */ = {
 			isa = XCBuildConfiguration;
@@ -612,6 +660,66 @@
 			};
 			name = CarPlay;
 		};
+		6AB3B8E3BFF6711E43BDEF77 /* PersonalRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 3;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 0.3.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = PersonalRelease;
+		};
 		8BB7764072C646286BAFAE8A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -664,7 +772,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -683,7 +791,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -748,7 +856,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -767,7 +875,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -779,6 +887,23 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		B6A6E93675BA83D885EA8A51 /* PersonalRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = space.thunguo.yuyin.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Yuyin.app/Yuyin";
+			};
+			name = PersonalRelease;
 		};
 		B7BA8857DDD6581B2AA54EE2 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -886,7 +1011,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -899,7 +1024,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -963,7 +1088,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -976,7 +1101,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1041,6 +1166,24 @@
 			};
 			name = Release;
 		};
+		F9E8E8091962B11101795A09 /* PersonalRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Config/PersonalDevice.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = "Config/App-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = space.thunguo.yuyin;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PERSONAL_DEVICE";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = PersonalRelease;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1050,6 +1193,7 @@
 				5084CEBE77C348E8E15B7DFF /* CarPlay */,
 				BFD999E5749AFDC15E0DBD1F /* Debug */,
 				E37760B053EA100C0081C633 /* PersonalDevice */,
+				F9E8E8091962B11101795A09 /* PersonalRelease */,
 				EBF38E6B55DB72D57D86D9AA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1061,6 +1205,7 @@
 				C6C849E71659CDBFBE522D49 /* CarPlay */,
 				B26BAE7B8CFC84E6156B8DAB /* Debug */,
 				9C26B7A0FF7E71546D8FEA85 /* PersonalDevice */,
+				6AB3B8E3BFF6711E43BDEF77 /* PersonalRelease */,
 				E2328675B8A0C8B1E9247BD2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1072,6 +1217,7 @@
 				459EDA6DBD7F30FC3B484E31 /* CarPlay */,
 				8BB7764072C646286BAFAE8A /* Debug */,
 				3305AEFDB4C97E6F928D57E4 /* PersonalDevice */,
+				B6A6E93675BA83D885EA8A51 /* PersonalRelease */,
 				33C77C8B3E6E55E7AE6C4FF1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1083,6 +1229,7 @@
 				5256EA9FD20B0991C4CB1FE1 /* CarPlay */,
 				E4FB68A4D87557AC033FDD11 /* Debug */,
 				C4D34C6D103FE17F4E06C350 /* PersonalDevice */,
+				45753C91776B86F755C6BDFF /* PersonalRelease */,
 				C590B612D1A3F6B8194796CA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -1094,6 +1241,7 @@
 				3336352A6AF56F1129341DF9 /* CarPlay */,
 				DD718FFC74BAB6FEC8EC8DD5 /* Debug */,
 				A6B61DEFB288DC5B86C84917 /* PersonalDevice */,
+				0047F97302D08527F5BD5305 /* PersonalRelease */,
 				B7BA8857DDD6581B2AA54EE2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;

@@ -56,6 +56,40 @@ import MusicCore
         p.enqueue([track(4)]); let before = p.queue
         XCTAssertFalse(p.apply(proposal)); XCTAssertEqual(p.queue, before)
     }
+    func testPreparedNextRespectsInsertedTrack() async {
+        let p = player(); defer { p.clear() }
+        var played: [Int64] = []; p.onTrackPlayed = { played.append($0.id) }
+        p.play([track(1), track(2)])
+        let began = await waitUntil { p.isPlaying }; XCTAssertTrue(began)
+        p.enqueue([track(3)], next: true)
+        let advanced = await waitUntil { played.count >= 3 }; XCTAssertTrue(advanced)
+        XCTAssertEqual(Array(played.prefix(3)), [1, 3, 2])
+    }
+    func testPreparedShuffleDoesNotRepeatBeforeExhaustion() async {
+        let p = player(); defer { p.clear() }
+        var played: [Int64] = []; p.onTrackPlayed = { played.append($0.id) }
+        p.queue.shuffle = true; p.play([track(1), track(2), track(3)])
+        let finished = await waitUntil { played.count == 3 }; XCTAssertTrue(finished)
+        XCTAssertEqual(Set(played), [1, 2, 3])
+    }
+    func testPreparedRepeatAllReturnsToFirstTrack() async {
+        let p = player(); defer { p.clear() }
+        var played: [Int64] = []; p.onTrackPlayed = { played.append($0.id) }
+        p.queue.repeatMode = .all; p.play([track(1), track(2)])
+        let repeated = await waitUntil { played.count >= 3 }; XCTAssertTrue(repeated)
+        XCTAssertEqual(Array(played.prefix(3)), [1, 2, 1])
+    }
+    func testResumeDuringRestorationKeepsCompleteQueueAndPendingAppend() async {
+        let p = player(); defer { p.clear() }
+        var full = QueueState(); full.replace([track(1), track(2)], origin: .playlist)
+        var summary = full; summary.entries = Array(full.entries.prefix(1))
+        p.restore(summary); p.restorationPending = true
+        p.resume(); p.enqueue([track(3)], next: true)
+        XCTAssertFalse(p.isPlaying)
+        p.finishRestoration(full)
+        let began = await waitUntil { p.isPlaying }; XCTAssertTrue(began)
+        XCTAssertEqual(p.queue.entries.map(\.track.id), [1, 3, 2])
+    }
     func testLegacyPreferencesAddSortDefaults() throws {
         let data = Data(#"{"musicTaste":"纯音乐","pinnedPlaylists":[],"quality":"exhigh","wifiOnly":true,"appearance":"system"}"#.utf8)
         let preferences = try JSONDecoder().decode(UserPreferences.self, from: data)

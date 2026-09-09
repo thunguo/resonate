@@ -11,6 +11,7 @@
   <a href="#界面">界面</a> ·
   <a href="#音乐与灵感">功能</a> ·
   <a href="#在-mac-上构建并安装到-iphone">安装到 iPhone</a> ·
+  <a href="Docs/Brand/README.md">图标</a> ·
   <a href="Docs/DEVELOPMENT.md">开发说明</a>
 </p>
 
@@ -46,13 +47,14 @@
 ## 音乐与灵感
 
 - **从收藏开始听**：继续上次的队列和进度，重听久未播放的收藏，浏览少量新发现。
+- **快速回到音乐**：已缓存的内容先从设备呈现，过期资料在后台更新；搜索先查收藏，封面按显示尺寸复用。智能预缓存会根据网络、电量和设备状态调整。
 - **整理自己的音乐库**：喜欢、歌单、专辑和音乐人；支持搜索、筛选、排序、固定常听内容，以及歌单增删、改名和曲序编辑。
 - **顺手的播放器**：完整封面、逐字与逐行歌词、播放队列、随机与循环、定时停止、AirPlay、后台播放和锁屏控制。
 - **按心情编排**：用自然语言描述想听什么，预览歌曲和实际时长，再播放、加入队列或保存为歌单；支持继续调整和撤销。
 - **了解一首歌**：查看歌曲、专辑和音乐人的资料与来源，阅读简短导读，继续追问或探索相关音乐。
 - **选择自己的模型**：支持 DeepSeek、阿里百炼、Kimi、智谱及自定义 OpenAI 兼容接口。模型功能按需启用，API Key 保存在设备 Keychain，请求从手机直接发送到所选服务。
 
-当前为 **0.2.0 开发版本**。离线下载尚未开放；小组件、快捷指令及 CarPlay 的能力边界见 [开发说明](Docs/DEVELOPMENT.md#系统能力)。
+当前为 **0.3.0 开发版本**。离线下载尚未开放；小组件、快捷指令及 CarPlay 的能力边界见 [开发说明](Docs/DEVELOPMENT.md#系统能力)。
 
 ## 在 Mac 上构建并安装到 iPhone
 
@@ -76,13 +78,13 @@ open Yuyin.xcodeproj
 ### 用 Xcode 安装
 
 1. 在 **Xcode → Settings → Apple Accounts** 登录 Apple 账户。
-2. 选择 **Yuyin** scheme，打开 **Product → Scheme → Edit Scheme → Run → Info**，将 **Build Configuration** 设为 **PersonalDevice**。
+2. 选择 **Yuyin** scheme，打开 **Product → Scheme → Edit Scheme → Run → Info**，将 **Build Configuration** 设为 **PersonalRelease**。
 3. 在工程的 **Signing & Capabilities** 中，为 **Yuyin** 和 **YuyinWidget** 两个 target 开启 **Automatically manage signing**，选择同一个 Team。
 4. 若默认 Bundle Identifier 不可用，为两个 target 分别设置自己的唯一标识，例如 `org.example.music` 和 `org.example.music.widget`。小组件标识以主 App 标识为前缀。
 5. 在 iPhone 的 **设置 → 隐私与安全性 → 开发者模式** 中启用开发者模式，按提示重启并确认。若没有该选项，先在 Xcode 中完成设备配对。
 6. 在 Xcode 顶部选择自己的 iPhone 作为运行设备，点击 **Run**（⌘R）。Xcode 会完成签名、构建、安装和启动。
 
-`PersonalDevice` 配置适合个人真机运行，不请求 App Groups 或 CarPlay 权限。它的小组件可打开 App，但不能共享实时播放摘要。
+`PersonalRelease` 使用发布优化，适合日常真机使用；需要调试时可选择 `PersonalDevice`。两种个人配置均不请求 App Groups 或 CarPlay 权限。它的小组件可打开 App，但不能共享实时播放摘要。
 
 设备配对、签名和开发者模式的详细说明见 Apple 的 [真机运行指南](https://developer.apple.com/documentation/xcode/running-your-app-on-simulated-or-physical-devices) 与 [开发者模式指南](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)。
 
@@ -103,7 +105,7 @@ YY_DEVICE_ID="YOUR_DEVICE_ID"
 xcodebuild \
   -project Yuyin.xcodeproj \
   -scheme Yuyin \
-  -configuration PersonalDevice \
+  -configuration PersonalRelease \
   -destination 'generic/platform=iOS' \
   -derivedDataPath build/DerivedData \
   -allowProvisioningUpdates \
@@ -112,7 +114,7 @@ xcodebuild \
 
 xcrun devicectl device install app \
   --device "$YY_DEVICE_ID" \
-  build/DerivedData/Build/Products/PersonalDevice-iphoneos/Yuyin.app
+  build/DerivedData/Build/Products/PersonalRelease-iphoneos/Yuyin.app
 
 xcrun devicectl device process launch \
   --device "$YY_DEVICE_ID" \
@@ -130,7 +132,7 @@ xcrun devicectl device process launch \
 | --- | --- |
 | 找不到手机，或显示 unavailable | 解锁手机，重新连接数据线，在 Xcode 的设备管理界面完成配对 |
 | 提示需要开发者模式 | 在手机上启用开发者模式，完成重启后的再次确认 |
-| 提示 App Groups 权限不可用 | 确认 Run 使用 `PersonalDevice`，并且 App 与小组件选择了同一个 Team |
+| 提示 App Groups 权限不可用 | 确认 Run 使用 `PersonalRelease`，并且 App 与小组件选择了同一个 Team |
 | Bundle Identifier 已被占用 | 为 App 和小组件设置一组自己可用的唯一标识 |
 | 提示没有可用的描述文件 | 在 Xcode 中选中真机运行一次，让自动签名注册设备并生成描述文件 |
 | 终端找不到 iOS SDK | 在 Xcode 的 Components 中安装 iOS 平台支持，并在 Locations 中选择完整 Xcode 的 Command Line Tools |
@@ -139,7 +141,9 @@ xcrun devicectl device process launch \
 
 ## 开始使用
 
-打开余音，在 **音乐库 → 右上角设置** 登录网易云音乐，等待收藏同步后即可开始听歌。
+打开余音，在 **音乐库 → 右上角设置** 登录网易云音乐。已有内容会先从本机恢复，收藏在后台同步。
+
+**设置 → 快速浏览** 可以查看缓存占用或关闭智能预缓存。额外预热只在 Wi-Fi 和设备状态合适时进行，不会下载离线音乐文件。
 
 需要 AI 时，进入 **设置 → 模型服务 → 添加**，选择厂商、填写 API Key 和模型 ID，查看数据范围并测试连接后启用。连接测试会发送少量请求，可能产生调用费用。
 

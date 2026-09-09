@@ -53,6 +53,7 @@ struct PlaylistTrackEditor: View {
     @Environment(\.dismiss) private var dismiss
     let playlist: Playlist
     let original: [Track]
+    var onSaved: ([Track]) -> Void = { _ in }
     @State private var tracks: [Track] = []
     @State private var error: String?
     @State private var busy = false
@@ -95,8 +96,8 @@ struct PlaylistTrackEditor: View {
                     try await store.music.reorderPlaylist(playlist.id, ids: tracks.map(\.id), expected: original.filter { !removedIDs.contains($0.id) }.map(\.id), userID: accountID)
                 }
                 guard store.profile?.id == accountID else { throw MusicError.staleSession }
-                store.invalidatePlaylist(playlist.id); await store.syncLibrary(); store.notify("歌单已同步"); dismiss()
-            } catch { self.error = error.localizedDescription; store.invalidatePlaylist(playlist.id) }
+                await store.cachePlaylist(tracks, id: playlist.id); onSaved(tracks); store.notify("歌单已同步"); dismiss()
+            } catch { self.error = error.localizedDescription; await store.invalidatePlaylist(playlist.id) }
         }
     }
 }

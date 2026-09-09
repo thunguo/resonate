@@ -55,6 +55,7 @@ public struct Track: Identifiable, Codable, Hashable, Sendable {
     public var duration: Double
     public var availability: Availability
     public var reason: String?
+    public var metadataPending: Bool? = nil
     public init(id: Int64, title: String, artists: [Artist], album: Album, duration: Double, availability: Availability = .unknown, reason: String? = nil) {
         self.id = id; self.title = title; self.artists = artists; self.album = album; self.duration = duration; self.availability = availability; self.reason = reason
     }
@@ -100,7 +101,7 @@ public enum SearchKind: Int, CaseIterable, Identifiable, Sendable {
     public var id: Int { rawValue }
     public var label: String { switch self { case .tracks: return "歌曲"; case .albums: return "专辑"; case .artists: return "音乐人"; case .playlists: return "歌单" } }
 }
-public struct SearchResult: Sendable { public var tracks: [Track] = []; public var albums: [Album] = []; public var artists: [Artist] = []; public var playlists: [Playlist] = []; public var hasMore = false; public init() {} }
+public struct SearchResult: Codable, Sendable { public var tracks: [Track] = []; public var albums: [Album] = []; public var artists: [Artist] = []; public var playlists: [Playlist] = []; public var hasMore = false; public init() {} }
 public enum AudioQuality: String, CaseIterable, Codable, Sendable {
     case standard, higher, exhigh, lossless, hires
     public var label: String { switch self { case .standard: return "标准"; case .higher: return "较高"; case .exhigh: return "极高"; case .lossless: return "无损"; case .hires: return "Hi-Res" } }

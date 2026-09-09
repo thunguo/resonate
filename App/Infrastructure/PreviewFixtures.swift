@@ -6,6 +6,13 @@ import MusicCore
 extension AppStore {
     func loadAdditionalPreviewFixtures() {
         let args = ProcessInfo.processInfo.arguments
+        if args.contains("--reading-test"), let current = player.current {
+            let lyrics = LyricsParser.parse(yrc: nil, lrc: (0..<60).map { String(format: "[%02d:00.00]测试歌词 %d", $0, $0) }.joined(separator: "\n"))
+            try? persistence.save(CachedValue(lyrics), key: accountKey("cache.lyrics.\(current.id)"))
+            var tracks = (0..<60).map { index in var track = current; track.id = Int64(index + 1); track.title = "队列歌曲 \(index)"; return track }
+            tracks[0] = current
+            var queue = QueueState(); queue.replace(tracks, origin: .album); player.restore(queue)
+        }
         if args.contains("--long-title"), !player.queue.entries.isEmpty {
             player.queue.entries[0].track.title = "在一个很长很长的夜晚，我们仍然想把这首歌慢慢听完"
         }

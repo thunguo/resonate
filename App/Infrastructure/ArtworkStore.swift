@@ -3,66 +3,113 @@ import CryptoKit
 import ImageIO
 import CoreImage
 
+final class ArtworkMemory: @unchecked Sendable {
+    static let shared = ArtworkMemory()
+    private let images = NSCache<NSString, UIImage>()
+    private init() { images.totalCostLimit = 64 * 1024 * 1024 }
+    func image(_ url: URL, pixels: Int) -> UIImage? { images.object(forKey: "\(url.absoluteString)|\(pixels)" as NSString) }
+    func insert(_ image: UIImage, url: URL, pixels: Int) {
+        images.setObject(image, forKey: "\(url.absoluteString)|\(pixels)" as NSString, cost: (image.cgImage?.bytesPerRow ?? 0) * (image.cgImage?.height ?? 0))
+    }
+    func clear() { images.removeAllObjects() }
+    static func size(_ pixels: Int) -> Int { [160, 384, 768, 1200].first { $0 >= pixels } ?? 1200 }
+}
+
 actor ArtworkStore {
     static let shared = ArtworkStore()
     private struct Entry: Codable { var bytes: Int; var lastAccess: Date }
     private var index: [String: Entry] = [:]
-    private var inFlight: [String: Task<UIImage, Error>] = [:]
-    private let images = NSCache<NSString, UIImage>()
+    private var inFlight: [String: Task<Data, Error>] = [:]
+    private var tints: [URL: UIColor] = [:]
+    private let context = CIContext(options: [.workingColorSpace: NSNull()])
     private var generation = UUID()
+    private var indexWrite: Task<Void, Never>?
     private let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("Artwork", isDirectory: true)
     init() {
-        images.totalCostLimit = 32 * 1024 * 1024
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: directory.appendingPathComponent("index.json")), let saved = try? JSONDecoder().decode([String: Entry].self, from: data) { index = saved }
     }
     var byteCount: Int { index.values.reduce(0) { $0 + $1.bytes } }
-    func image(_ url: URL) async throws -> UIImage {
+    func contains(_ url: URL) -> Bool { index[key(url)] != nil }
+    func image(_ url: URL, pixels: Int = 768) async throws -> UIImage {
+        let pixels = ArtworkMemory.size(pixels)
+        if let image = ArtworkMemory.shared.image(url, pixels: pixels) { return image }
         guard url.scheme == "https" else { throw URLError(.badURL) }
-        let key = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
-        if let image = images.object(forKey: key as NSString) { return image }
-        if let pending = inFlight[key] { return try await pending.value }
-        let epoch = generation, file = directory.appendingPathComponent(key)
-        if let data = try? Data(contentsOf: file), let image = Self.decode(data) {
-            index[key]?.lastAccess = .now; cache(image, key); return image
-        }
-        let task = Task<UIImage, Error> {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode), data.count <= 12 * 1024 * 1024, let image = Self.decode(data) else { throw URLError(.cannotDecodeContentData) }
-            if generation == epoch {
-                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                do { try data.write(to: file, options: .atomic); index[key] = .init(bytes: data.count, lastAccess: .now); trim() } catch { }
-                cache(image, key)
+        let epoch = generation, key = key(url), file = directory.appendingPathComponent(key)
+        var data = try? Data(contentsOf: file)
+        if data == nil {
+            let task: Task<Data, Error>
+            if let pending = inFlight[key] { task = pending }
+            else {
+                task = Task {
+                    let request = URLRequest(url: url, timeoutInterval: 20)
+                    let data = try await LimitedDataLoader.load(request, limit: 12 * 1024 * 1024).0
+                    guard generation == epoch else { throw CancellationError() }
+                    try store(data, url: url); return data
+                }
+                inFlight[key] = task
             }
-            return image
+            defer { if generation == epoch { inFlight[key] = nil } }
+            data = try await task.value
+            guard epoch == generation else { throw CancellationError() }
         }
-        inFlight[key] = task
-        defer { inFlight[key] = nil }
-        return try await task.value
+        guard let data, let image = Self.decode(data, pixels: pixels) else { throw URLError(.cannotDecodeContentData) }
+        guard epoch == generation else { throw CancellationError() }
+        index[key]?.lastAccess = .now; scheduleIndexWrite()
+        ArtworkMemory.shared.insert(image, url: url, pixels: pixels)
+        return image
+    }
+    func preheat(_ url: URL, budget: PreheatBudget) async throws {
+        guard !contains(url) else { return }
+        let epoch = generation, limit = 2 * 1024 * 1024
+        guard await budget.reserve(limit) else { throw URLError(.dataLengthExceedsMaximum) }
+        let data = try await LimitedDataLoader.load(URLRequest(url: url, timeoutInterval: 12), limit: limit).0
+        try Task.checkCancellation(); guard epoch == generation else { throw CancellationError() }
+        try store(data, url: url)
     }
     func tint(_ url: URL) async -> UIColor? {
-        guard let image = try? await image(url), let cg = image.cgImage else { return nil }
+        if let tint = tints[url] { return tint }
+        guard let image = try? await image(url, pixels: 160), let cg = image.cgImage else { return nil }
         let input = CIImage(cgImage: cg)
         guard let filter = CIFilter(name: "CIAreaAverage", parameters: [kCIInputImageKey: input, kCIInputExtentKey: CIVector(cgRect: input.extent)]), let output = filter.outputImage else { return nil }
         var pixel = [UInt8](repeating: 0, count: 4)
-        CIContext(options: [.workingColorSpace: NSNull()]).render(output, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
-        return UIColor(red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255, blue: CGFloat(pixel[2]) / 255, alpha: 1)
+        context.render(output, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        let tint = UIColor(red: CGFloat(pixel[0]) / 255, green: CGFloat(pixel[1]) / 255, blue: CGFloat(pixel[2]) / 255, alpha: 1)
+        tints[url] = tint; return tint
     }
     func clear() {
-        generation = UUID(); inFlight.values.forEach { $0.cancel() }; inFlight = [:]; images.removeAllObjects(); index = [:]
+        generation = UUID(); indexWrite?.cancel(); inFlight.values.forEach { $0.cancel() }; inFlight = [:]
+        ArtworkMemory.shared.clear(); tints = [:]; index = [:]
         try? FileManager.default.removeItem(at: directory); try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
-    private func cache(_ image: UIImage, _ key: String) { images.setObject(image, forKey: key as NSString, cost: (image.cgImage?.bytesPerRow ?? 0) * (image.cgImage?.height ?? 0)) }
+    private func key(_ url: URL) -> String { SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined() }
+    private func store(_ data: Data, url: URL) throws {
+        guard let image = Self.decode(data, pixels: 1200), let compressed = image.jpegData(compressionQuality: 0.88) else { throw URLError(.cannotDecodeContentData) }
+        let key = key(url)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try compressed.write(to: directory.appendingPathComponent(key), options: .atomic)
+        index[key] = .init(bytes: compressed.count, lastAccess: .now)
+        trim(); scheduleIndexWrite()
+    }
     private func trim() {
         var total = byteCount
-        for (key, entry) in index.sorted(by: { $0.value.lastAccess < $1.value.lastAccess }) where total > 80 * 1024 * 1024 {
+        for (key, entry) in index.sorted(by: { $0.value.lastAccess < $1.value.lastAccess }) where total > 260 * 1024 * 1024 {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(key)); index.removeValue(forKey: key); total -= entry.bytes
         }
-        if let data = try? JSONEncoder().encode(index) { try? data.write(to: directory.appendingPathComponent("index.json"), options: .atomic) }
     }
-    private static func decode(_ data: Data) -> UIImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil), let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: 1024] as CFDictionary) else { return nil }
+    private func scheduleIndexWrite() {
+        guard indexWrite == nil else { return }
+        indexWrite = Task {
+            do {
+                try await Task.sleep(for: .seconds(2)); try Task.checkCancellation()
+                let data = try JSONEncoder().encode(index)
+                try data.write(to: directory.appendingPathComponent("index.json"), options: .atomic)
+            } catch { }
+            indexWrite = nil
+        }
+    }
+    private static func decode(_ data: Data, pixels: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: pixels, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
         return UIImage(cgImage: cg)
     }
 }

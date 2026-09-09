@@ -9,14 +9,15 @@ configs:
   Release: release
   CarPlay: release
   PersonalDevice: debug
+  PersonalRelease: release
 settings:
   base:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.3.0"
+    CURRENT_PROJECT_VERSION: "3"
 packages:
   MusicCore:
     path: Packages/MusicCore
@@ -37,6 +38,9 @@ targets:
       configs:
         CarPlay:
           CODE_SIGN_ENTITLEMENTS: Config/CarPlay.entitlements
+        PersonalRelease:
+          CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_DEVICE"
         PersonalDevice:
           CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG PERSONAL_DEVICE"
@@ -55,6 +59,9 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
       configs:
+        PersonalRelease:
+          CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) PERSONAL_DEVICE"
         PersonalDevice:
           CODE_SIGN_ENTITLEMENTS: Config/PersonalDevice.entitlements
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG PERSONAL_DEVICE"
@@ -78,3 +85,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: space.thunguo.yuyin.uitests
         GENERATE_INFOPLIST_FILE: YES
+schemes:
+  YuyinPerformance:
+    build:
+      targets:
+        Yuyin: [test, run]
+        YuyinTests: [test]
+    run:
+      config: PersonalRelease
+    test:
+      config: PersonalRelease
+      targets: [YuyinTests]
+      gatherCoverageData: false

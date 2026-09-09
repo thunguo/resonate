@@ -6,49 +6,54 @@ struct ListenView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
+            VStack(alignment: .leading, spacing: 28) {
                 header
                 if let current = store.player.current { continueCard(current) }
                 else if store.isLoggedIn { libraryStartCard }
                 else { welcomeCard }
+                if store.sessionExpired {
+                    Button("登录已失效，重新连接") { store.showLogin = true }.font(.subheadline).frame(minHeight: 44)
+                }
                 collectionSection
                 discoverySection
                 arrangementEntry
-                HStack { Rectangle().fill(Palette.line).frame(height: 1); Image(systemName: "waveform").font(.caption).foregroundStyle(Palette.secondary); Rectangle().fill(Palette.line).frame(height: 1) }.padding(.vertical, 12).accessibilityHidden(true)
             }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 24)
-        }.cabinetBackground().toolbar(.hidden, for: .navigationBar).refreshable { await store.syncLibrary(); await store.refreshDiscoveries() }
+        }.cabinetBackground().toolbar(.hidden, for: .navigationBar).refreshable { async let library: Void = store.syncLibrary(); async let discovery: Void = store.refreshDiscoveries(); _ = await (library, discovery) }
     }
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 12) { Eyebrow(text: store.previewMode ? "界面预览 · 示例音乐" : Date.now.formatted(.dateTime.month(.wide).day()) + " · 留一点时间给音乐"); Text("慢慢听。").font(.system(.largeTitle, design: .serif).weight(.medium)).foregroundStyle(Palette.text) }
+        HStack(alignment: .center) {
+            Text("听听").font(.largeTitle.weight(.semibold)).accessibilityIdentifier("listenTitle")
             Spacer()
-            Image(systemName: "sun.horizon").font(.system(size: 25, weight: .ultraLight)).foregroundStyle(Palette.accent).padding(.top, 10).accessibilityHidden(true)
-        }
+            Text(Date.now.formatted(.dateTime.month().day())).font(.subheadline).foregroundStyle(Palette.secondary)
+        }.padding(.bottom, 2)
     }
     private func continueCard(_ track: Track) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack { Eyebrow(text: "继续听"); Spacer(); Text("\(timeLabel(store.player.position)) / \(timeLabel(store.player.duration))").font(.caption.monospacedDigit()).foregroundStyle(Palette.secondary) }
-            HStack(alignment: .center, spacing: 20) {
-                Artwork(url: track.album.artwork, size: typeSize.isAccessibilitySize ? 96 : 132, radius: 6)
-                VStack(alignment: .leading, spacing: 9) {
-                    Text(track.title).font(.title3.weight(.medium)).lineLimit(3)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack { Text("继续听").font(.subheadline.weight(.medium)); Spacer(); Image(systemName: "arrow.up.right").font(.caption) }.foregroundStyle(Palette.secondary)
+            Button { store.showPlayer = true } label: {
+                GeometryReader { geometry in Artwork(url: track.album.artwork, size: geometry.size.width, radius: 12) }.aspectRatio(1, contentMode: .fit)
+            }.buttonStyle(MusicPressStyle()).accessibilityLabel("打开播放器，\(track.title)")
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(track.title).font(.title2.weight(.semibold)).lineLimit(2)
                     Text(track.artistName).font(.subheadline).foregroundStyle(Palette.secondary).lineLimit(2)
-                    Button { store.player.resume() } label: { Label("继续播放", systemImage: "play.fill").font(.subheadline.weight(.medium)).frame(minHeight: 44) }.buttonStyle(.plain).foregroundStyle(Palette.accent).accessibilityIdentifier("continuePlayback")
                 }.frame(maxWidth: .infinity, alignment: .leading)
+                Button { store.player.resume() } label: { Image(systemName: "play.fill").font(.title3).frame(width: 56, height: 56).foregroundStyle(Palette.background).background(Palette.accent, in: Circle()) }
+                    .buttonStyle(MusicPressStyle()).accessibilityLabel("继续播放").accessibilityIdentifier("continuePlayback")
             }
-        }.padding(20).background(Palette.surface.opacity(0.72), in: RoundedRectangle(cornerRadius: 16))
+        }.padding(18).background { ArtworkAtmosphere(url: track.album.artwork).clipShape(RoundedRectangle(cornerRadius: 24)) }
     }
     private var welcomeCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Eyebrow(text: "你的音乐藏馆")
-            Text("熟悉的旋律，\n也值得重新遇见。").font(.title2.weight(.regular)).lineSpacing(6)
+            Eyebrow(text: "余音")
+            Text("收藏值得反复听。").font(.title.weight(.medium)).lineSpacing(6)
             Text("带上网易云里的收藏，从喜欢的音乐开始。").font(.subheadline).foregroundStyle(Palette.secondary).lineSpacing(4)
-            Button { store.showLogin = true } label: { Label("连接网易云音乐", systemImage: "arrow.up.right").frame(minHeight: 44) }.buttonStyle(.plain).foregroundStyle(Palette.accent).accessibilityIdentifier("connectMusic")
+            Button { store.showLogin = true } label: { Label("连接网易云音乐", systemImage: "arrow.up.right").frame(minHeight: 44) }.buttonStyle(MusicPressStyle()).foregroundStyle(Palette.accent).accessibilityIdentifier("connectMusic")
         }.frame(maxWidth: .infinity, alignment: .leading).padding(24).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
     }
     private var libraryStartCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Eyebrow(text: "你的音乐藏馆")
+            Eyebrow(text: "余音")
             Text("从收藏开始听").font(.title2).accessibilityIdentifier("libraryStartTitle")
             if !store.library.likedTracks.isEmpty {
                 Text("\(store.library.likedTracks.count) 首喜欢的歌，等你重新听见。").font(.subheadline).foregroundStyle(Palette.secondary)
@@ -65,7 +70,7 @@ struct ListenView: View {
                 Text("还没有收藏，从一首喜欢的歌开始。").font(.subheadline).foregroundStyle(Palette.secondary)
                 Button("去找喜欢的歌") { store.selectedTab = 2 }.frame(minHeight: 44).accessibilityIdentifier("findFirstTrack")
             }
-        }.buttonStyle(.plain).tint(Palette.accent).frame(maxWidth: .infinity, alignment: .leading).padding(24).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }.buttonStyle(MusicPressStyle()).tint(Palette.accent).frame(maxWidth: .infinity, alignment: .leading).padding(24).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
     }
     private var collectionSection: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -75,14 +80,14 @@ struct ListenView: View {
             } else {
                 let tracks = Array(store.rediscoveries.prefix(3))
                 ForEach(Array(tracks.enumerated()), id: \.element.id) { i, track in TrackRow(track: track) { store.player.play(store.rediscoveries, at: i) } }
-                Button { store.recordCollectionReplay(); store.player.play(store.rediscoveries) } label: { Label("重听收藏", systemImage: "play.fill").font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(Palette.accent)
+                Button { store.recordCollectionReplay(); store.player.play(store.rediscoveries) } label: { Label("重听收藏", systemImage: "play.fill").font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) }.buttonStyle(MusicPressStyle()).foregroundStyle(Palette.accent)
             }
         }
     }
     private var discoverySection: some View {
         VStack(alignment: .leading, spacing: 20) {
             SectionHeading(title: "今天的新发现", subtitle: store.isLoggedIn ? "来自网易云每日推荐" : "从新的旋律开始探索")
-            if store.isLoading && store.discoveries.isEmpty { ProgressView("正在寻找音乐…").frame(maxWidth: .infinity).padding(30) }
+            if store.isLoading && store.discoveries.isEmpty { DelayedProgress(title: "正在寻找音乐…") }
             if let error = store.discoveryError, store.discoveries.isEmpty { InlineError(message: error) { Task { await store.refreshDiscoveries() } } }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 230 : 150), spacing: 20)], alignment: .leading, spacing: 24) {
                 ForEach(Array(store.discoveries.prefix(6).enumerated()), id: \.element.id) { index, track in
@@ -92,7 +97,7 @@ struct ListenView: View {
                             Text(track.title).font(.subheadline.weight(.medium)).foregroundStyle(Palette.text).lineLimit(2)
                             Text(track.reason ?? track.artistName).font(.caption).foregroundStyle(Palette.secondary).lineLimit(2)
                         }.frame(maxWidth: .infinity, alignment: .topLeading)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(MusicPressStyle())
                 }
             }
         }
@@ -100,6 +105,6 @@ struct ListenView: View {
     private var arrangementEntry: some View {
         Button { store.arrangementPrompt = ""; store.showArrangement = true } label: {
             HStack(spacing: 16) { Image(systemName: "slider.horizontal.3").font(.title3.weight(.light)); VStack(alignment: .leading, spacing: 6) { Text("换一种听法").font(.headline); Text("说说此刻想听什么").font(.subheadline).foregroundStyle(Palette.secondary) }; Spacer(); Image(systemName: "arrow.up.right").font(.subheadline) }.padding(.vertical, 22).padding(.horizontal, 20).background(Palette.surface.opacity(0.65), in: RoundedRectangle(cornerRadius: 14))
-        }.buttonStyle(.plain).accessibilityIdentifier("arrangeEntry")
+        }.buttonStyle(MusicPressStyle()).accessibilityIdentifier("arrangeEntry")
     }
 }

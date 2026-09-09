@@ -25,7 +25,7 @@ struct ArrangementView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 10) { Eyebrow(text: "音乐，贴近此刻"); Text("换一种听法").font(.largeTitle.weight(.medium)); Text("说说想听什么，剩下的交给音乐。").font(.subheadline).foregroundStyle(Palette.secondary) }
+                    VStack(alignment: .leading, spacing: 10) { Text("换一种听法").font(.largeTitle.weight(.semibold)); Text("从收藏里，为此刻选一段音乐。").font(.subheadline).foregroundStyle(Palette.secondary) }
                     TextField("例如：收藏里适合夜晚散步的歌，四十分钟", text: $prompt, axis: .vertical).lineLimit(3...6).padding(18).background(Palette.surface, in: RoundedRectangle(cornerRadius: 14)).accessibilityIdentifier("arrangementPrompt")
                     if store.activeProviderName == nil {
                         VStack(alignment: .leading, spacing: 10) { Text("连接你选择的模型服务，开始编排。").font(.subheadline).foregroundStyle(Palette.secondary); Button("连接模型服务") { settings = true }.frame(minHeight: 44) }
@@ -60,7 +60,9 @@ struct ArrangementView: View {
     }
     private func result(_ result: Arrangement) -> some View {
         VStack(alignment: .leading, spacing: 18) {
-            Divider().overlay(Palette.line)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) { ForEach(Array(result.displayedTracks.prefix(4).enumerated()), id: \.offset) { _, track in Artwork(url: track.album.artwork, size: 112, radius: 10) } }
+            }.padding(.vertical, 8)
             SectionHeading(title: result.title, subtitle: "\(result.displayedTracks.count) 首 · 约 \(Int(result.remainingDuration / 60)) 分钟 · \(result.displayedTracks.filter { result.likedIDs.contains($0.id) }.count) 首收藏")
             if result.queueSignature != nil { Text("预计时长包含正在播放的剩余部分和手动固定的歌曲。").font(.caption).foregroundStyle(Palette.secondary) }
             ForEach(result.notes ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(Palette.secondary) }
@@ -127,6 +129,7 @@ struct ExplanationView: View {
     let track: Track
     @State private var sources: [MusicSource] = []
     @State private var response = ""
+    @State private var draftResponse = ""
     @State private var question = ""
     @State private var history: [ChatMessage] = []
     @State private var loadingSources = true
@@ -144,11 +147,17 @@ struct ExplanationView: View {
                     HStack(spacing: 16) { Artwork(url: track.album.artwork, size: 76); VStack(alignment: .leading, spacing: 8) { Text(track.title).font(.title3.weight(.medium)); Text(track.artistName).font(.subheadline).foregroundStyle(Palette.secondary) } }
                     SectionHeading(title: "音乐资料")
                     Text("\(track.album.name) · \(timeLabel(track.duration))").font(.subheadline).foregroundStyle(Palette.secondary)
-                    if loadingSources { ProgressView("读取来源…") }
+                    if loadingSources { DelayedProgress(title: "读取来源…") }
                     ForEach(sources) { source in DisclosureGroup(source.title) { VStack(alignment: .leading, spacing: 12) { Text(source.text).font(.subheadline).lineSpacing(5); Link("查看来源", destination: source.url).font(.subheadline) }.padding(.vertical, 12) } }
                     if let error { InlineError(message: error) }
                     SectionHeading(title: "欣赏角度", subtitle: "AI 导读，基于上方资料；推断会单独标注")
                     if !response.isEmpty { Text(CitationValidator.attributedText(response, sources: sources)).font(.body).textSelection(.enabled).lineSpacing(7).frame(maxWidth: .infinity, alignment: .leading) }
+                    if !draftResponse.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(generating ? "新的回答" : "未完成的回答").font(.subheadline.weight(.medium)).foregroundStyle(Palette.secondary)
+                            Text(CitationValidator.attributedText(draftResponse, sources: sources)).lineSpacing(7).textSelection(.enabled)
+                        }.padding(18).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+                    }
                     if generating { HStack { ProgressView(); Text("正在写一段导读…").font(.subheadline).foregroundStyle(Palette.secondary); Spacer(); Button("取消") { explanationGeneration = UUID(); task?.cancel(); error = "导读未完成，已保留收到的内容。"; generating = false; saveCurrentExplanation() } }.frame(minHeight: 44) }
                     else if response.isEmpty {
                         FilledButton(title: "读一段音乐导读", symbol: "text.alignleft") { explain("请介绍这首歌。事实仅限资料；资料不足时说明，并给出不依赖音频分析的欣赏角度。") }.disabled(loadingSources)
@@ -168,9 +177,9 @@ struct ExplanationView: View {
                 .task {
                     explanationAccountID = store.profile?.id
                     if let saved = store.explanationRecord(track.id) { response = saved.text; sources = saved.sources; history = saved.history; error = saved.validationMessage }
-                    else { do { sources = try await store.musicSources(track) } catch { self.error = error.localizedDescription } }
+                    else { do { for try await value in store.sourceUpdates(track) { sources = value; loadingSources = false } } catch { self.error = error.localizedDescription } }
                     loadingSources = false
-                    related = (try? await store.music.similarTracks(track.id)) ?? []
+                    do { for try await items in store.repository.updates([Track].self, key: store.accountKey("cache.similar.\(track.id)"), lifetime: Freshness.metadata, fetch: { [music = store.music, track] in try await music.similarTracks(track.id) }) { related = items } } catch { }
                 }
                 .sheet(isPresented: Binding(get: { store.showLogin && !settings }, set: { store.showLogin = $0 })) { LoginView() }
         }.onDisappear { if generating { error = "导读未完成，已保留收到的内容。" }; explanationGeneration = UUID(); task?.cancel(); saveCurrentExplanation() }
@@ -181,15 +190,15 @@ struct ExplanationView: View {
     }
     private func explain(_ prompt: String) {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        task?.cancel(); error = nil; generating = true
+        task?.cancel(); error = nil; draftResponse = ""; generating = true
         let oldResponse = response
         let token = UUID(); explanationGeneration = token; let accountID = store.profile?.id
         task = Task {
             defer { if explanationGeneration == token { generating = false } }
             do {
                 let intelligence = try MusicIntelligence(music: store.music, provider: store.provider(explanation: true))
-                let text = try await intelligence.explain(track: track, question: prompt, sources: sources, previous: history) { text in await MainActor.run { if explanationGeneration == token && store.profile?.id == accountID { response = text } } }
-                try Task.checkCancellation(); guard explanationGeneration == token, store.profile?.id == accountID else { return }; history += [.init("user", prompt), .init("assistant", text)]; question = ""; saveCurrentExplanation()
+                let text = try await intelligence.explain(track: track, question: prompt, sources: sources, previous: history) { text in await MainActor.run { if explanationGeneration == token && store.profile?.id == accountID { if oldResponse.isEmpty { response = text } else { draftResponse = text } } } }
+                try Task.checkCancellation(); guard explanationGeneration == token, store.profile?.id == accountID else { return }; response = text; draftResponse = ""; history += [.init("user", prompt), .init("assistant", text)]; question = ""; saveCurrentExplanation()
             } catch is CancellationError { if explanationGeneration == token && response.isEmpty { response = oldResponse } }
             catch { guard explanationGeneration == token, store.profile?.id == accountID else { return }; self.error = error.localizedDescription; if response.isEmpty { response = oldResponse }; saveCurrentExplanation() }
         }

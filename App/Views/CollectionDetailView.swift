@@ -8,6 +8,9 @@ struct CollectionDetailView: View {
     var album: Album?
     var artist: Artist?
     @State private var tracks: [Track] = []
+    @State private var filtered: [Track] = []
+    @State private var contentRevision = 0
+    @State private var compactHeading = false
     @State private var artistAlbums: [Album] = []
     @State private var albumOffset = 0
     @State private var moreAlbums = false
@@ -28,18 +31,20 @@ struct CollectionDetailView: View {
     private var title: String { renamedTitle ?? playlist?.name ?? album?.name ?? artist?.name ?? "音乐" }
     private var artwork: URL? { playlist?.artwork ?? album?.artwork ?? artist?.artwork }
     private var owned: Bool { guard let playlist, let user = store.profile else { return false }; return playlist.creatorID == user.id }
-    private var filtered: [Track] { tracks.filter { query.isEmpty || ($0.title + $0.artistName + $0.album.name).localizedCaseInsensitiveContains(query) } }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                ViewThatFits(in: .horizontal) { coverHeader; VStack(alignment: .leading, spacing: 16) { Artwork(url: artwork, size: 132, radius: artist == nil ? 6 : 66); heading } }
+                VStack(alignment: .leading, spacing: 20) {
+                    Artwork(url: artwork, size: artist == nil ? 224 : 160, radius: artist == nil ? 12 : 80).frame(maxWidth: .infinity).padding(.top, 8)
+                    heading
+                }.padding(20).frame(maxWidth: .infinity).background { ArtworkAtmosphere(url: artwork).clipShape(RoundedRectangle(cornerRadius: 24)) }
                 if let summary = playlist?.summary, !summary.isEmpty { Text(summary).font(.subheadline).foregroundStyle(Palette.secondary).lineLimit(4) }
                 HStack(spacing: 12) {
                     FilledButton(title: query.isEmpty ? "播放" : "播放筛选结果", symbol: "play.fill") { store.player.play(filtered, origin: album != nil ? .album : .playlist) }.disabled(filtered.isEmpty)
                     IconButton(symbol: "text.append", label: "加入队列") { store.player.enqueue(filtered); store.notify("已加入队列") }.disabled(filtered.isEmpty)
                     if let playlist { IconButton(symbol: store.preferences.pinnedPlaylists.contains(playlist.id) ? "pin.fill" : "pin", label: "固定歌单") { store.pinPlaylist(playlist.id) } }
                 }
-                if loading { ProgressView("正在读取音乐…").frame(maxWidth: .infinity).padding(30) }
+                if loading && tracks.isEmpty { DelayedProgress(title: "正在读取音乐…") }
                 if let error { InlineError(message: error) { Task { await load(refresh: true) } } }
                 if !tracks.isEmpty {
                     HStack { Image(systemName: "magnifyingglass"); TextField("在歌曲中查找", text: $query); if !query.isEmpty { IconButton(symbol: "xmark.circle.fill", label: "清除筛选") { query = "" } } }.foregroundStyle(Palette.secondary).frame(minHeight: 44)
@@ -52,7 +57,8 @@ struct CollectionDetailView: View {
                 } else if !loading, error == nil { EmptyState(symbol: "music.note.list", title: "还没有歌曲", detail: owned ? "从右上角添加喜欢的音乐。" : "稍后刷新再看看。") }
                 if artist != nil { albumsSection }
             }.padding(20)
-        }.cabinetBackground().navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        }.cabinetBackground().navigationTitle(compactHeading ? title : "").navigationBarTitleDisplayMode(.inline)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y > (artist == nil ? 310 : 240) } action: { _, value in compactHeading = value }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -67,9 +73,17 @@ struct CollectionDetailView: View {
             }
         }
         .task { await load() }.refreshable { await load(refresh: true) }
+        .task(id: "\(contentRevision)|\(query)") {
+            let source = tracks, text = query
+            if text.isEmpty { filtered = source; return }
+            let matches = await Task.detached(priority: .userInitiated) {
+                source.filter { ($0.title + $0.artistName + $0.album.name).localizedCaseInsensitiveContains(text) }
+            }.value
+            guard !Task.isCancelled else { return }; filtered = matches
+        }
         .alert("重命名歌单", isPresented: $renaming) { TextField("歌单名称", text: $proposedName); Button("取消", role: .cancel) { }; Button("保存") { rename() } }
         .confirmationDialog("从网易云删除“\(title)”？此操作无法撤销。", isPresented: $deleting, titleVisibility: .visible) { Button("删除歌单", role: .destructive) { delete() } }
-        .sheet(isPresented: $editing, onDismiss: { Task { await load(refresh: true) } }) { if let playlist { PlaylistTrackEditor(playlist: playlist, original: tracks) } }
+        .sheet(isPresented: $editing) { if let playlist { PlaylistTrackEditor(playlist: playlist, original: tracks) { updateTracks($0) } } }
         .sheet(isPresented: $adding) {
             TrackSelectionView(title: "添加歌曲", tracks: store.library.likedTracks, allowsSearch: true) { selection in
                 guard let playlist else { return }
@@ -81,7 +95,6 @@ struct CollectionDetailView: View {
         }
         .sheet(isPresented: $pickingDestination, onDismiss: { selectedTracks = [] }) { PlaylistPicker(tracks: selectedTracks) }
     }
-    private var coverHeader: some View { HStack(spacing: 20) { Artwork(url: artwork, size: 132, radius: artist == nil ? 6 : 66); heading.fixedSize(horizontal: false, vertical: true) } }
     private var heading: some View { VStack(alignment: .leading, spacing: 12) { Eyebrow(text: artist != nil ? "音乐人" : album != nil ? "专辑" : "歌单"); Text(title).font(.title2.weight(.medium)); Text(album?.artistName ?? "\(tracks.count) 首歌曲").font(.subheadline).foregroundStyle(Palette.secondary) } }
     private var albumsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -92,21 +105,25 @@ struct CollectionDetailView: View {
         }
     }
     private var isSubscribed: Bool { if let album { return store.library.albums.contains { $0.id == album.id } }; if let artist { return store.library.artists.contains { $0.id == artist.id } }; return store.library.playlists.contains { $0.id == playlist?.id } }
+    private func updateTracks(_ value: [Track]) {
+        tracks = value; contentRevision += 1
+        if query.isEmpty { filtered = value }
+    }
     private func load(refresh: Bool = false) async {
         loading = true; error = nil; defer { loading = false }
         do {
-            if let playlist { tracks = try await store.playlistTracks(playlist.id, refresh: refresh) }
-            if let album { tracks = try await store.albumTracks(album.id, refresh: refresh) }
-            if let artist { tracks = try await store.artistTracks(artist.id, refresh: refresh) }
+            for try await snapshot in store.trackUpdates(playlist: playlist, album: album, artist: artist, refresh: refresh) {
+                try Task.checkCancellation(); updateTracks(snapshot); loading = false
+            }
         } catch is CancellationError { } catch { self.error = error.localizedDescription }
-        if artist != nil, artistAlbums.isEmpty || refresh { artistAlbums = []; albumOffset = 0; await loadAlbums(refresh: refresh) }
+        if artist != nil, artistAlbums.isEmpty || refresh { albumOffset = 0; await loadAlbums(refresh: refresh) }
     }
     private func loadAlbums(refresh: Bool = false) async {
         guard let artist else { return }; busy = true; albumError = nil; defer { busy = false }
         do {
             let page = try await store.artistAlbumPage(artist.id, offset: albumOffset, refresh: refresh)
             let existing = Set(artistAlbums.map(\.id)); let fresh = page.albums.filter { !existing.contains($0.id) }
-            artistAlbums += fresh; albumOffset += page.albums.count; moreAlbums = page.more && !fresh.isEmpty
+            if albumOffset == 0 { artistAlbums = page.albums } else { artistAlbums += fresh }; albumOffset += page.albums.count; moreAlbums = page.more && !fresh.isEmpty
         } catch is CancellationError { } catch { albumError = error.localizedDescription }
     }
     private func rename() {
@@ -115,7 +132,7 @@ struct CollectionDetailView: View {
     }
     private func delete() {
         guard let playlist, let id = store.profile?.id else { return }; busy = true
-        Task { defer { busy = false }; do { try await store.music.deletePlaylist(playlist.id, userID: id); guard store.profile?.id == id else { return }; store.invalidatePlaylist(playlist.id); store.preferences.pinnedPlaylists.remove(playlist.id); store.savePreferences(); await store.syncLibrary(); dismiss() } catch { self.error = error.localizedDescription } }
+        Task { defer { busy = false }; do { try await store.music.deletePlaylist(playlist.id, userID: id); guard store.profile?.id == id else { return }; await store.invalidatePlaylist(playlist.id); store.preferences.pinnedPlaylists.remove(playlist.id); store.savePreferences(); await store.syncLibrary(); dismiss() } catch { self.error = error.localizedDescription } }
     }
     private func subscribe() {
         guard store.requireLogin() else { return }; busy = true

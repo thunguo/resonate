@@ -1,53 +1,77 @@
 import Foundation
 import MusicCore
 
-struct CachedValue<Value: Codable>: Codable { var value: Value; var updatedAt = Date() }
-struct ArtistAlbumPage: Codable { var albums: [Album]; var more: Bool }
+struct ArtistAlbumPage: Codable, Sendable { var albums: [Album]; var more: Bool }
 
 extension AppStore {
-    private func cached<Value: Codable>(_ type: Value.Type, _ key: String) -> CachedValue<Value>? {
-        persistence.load(CachedValue<Value>.self, key: accountKey("cache." + key))
+    func playlistTracks(_ id: Int64, refresh: Bool = false) async throws -> [Track] {
+        try await repository.value([Track].self, key: accountKey("cache.playlist.\(id)"), lifetime: Freshness.collection, refresh: refresh) { [music] in try await music.playlistTracks(id) }
     }
-    private func readThrough<Value: Codable>(_ type: Value.Type, key: String, refresh: Bool, lifetime: TimeInterval = 1800, fetch: () async throws -> Value) async throws -> Value {
-        let saved = cached(type, key), generation = accountGeneration
-        if !refresh, let saved, Date().timeIntervalSince(saved.updatedAt) < lifetime { return saved.value }
-        do {
-            let value = try await fetch()
-            guard generation == accountGeneration else { throw MusicError.staleSession }
-            do { try persistence.save(CachedValue(value: value), key: accountKey("cache." + key)) } catch { report(error) }
-            return value
-        } catch is CancellationError { throw CancellationError() }
-        catch {
-            if Task.isCancelled { throw CancellationError() }
-            guard generation == accountGeneration else { throw MusicError.staleSession }
-            if let saved { notify("暂时无法更新，正在显示已缓存的音乐资料。"); return saved.value }
-            throw error
+    func trackUpdates(playlist: Playlist?, album: Album?, artist: Artist?, refresh: Bool = false) -> AsyncThrowingStream<[Track], Error> {
+        let key = playlist.map { "playlist.\($0.id)" } ?? album.map { "album.\($0.id)" } ?? "artist.\(artist?.id ?? 0)"
+        let cacheKey = accountKey("cache." + key), epoch = accountGeneration
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    if await repository.memorySnapshot([Track].self, key: cacheKey) == nil,
+                       let preview = try await background.trackPreview(key: cacheKey) {
+                        try Task.checkCancellation(); guard epoch == accountGeneration else { throw CancellationError() }
+                        continuation.yield(preview)
+                    }
+                    let updates = repository.progressiveUpdates([Track].self, key: cacheKey, lifetime: playlist == nil ? Freshness.metadata : Freshness.collection, refresh: refresh) { [music] emit in
+                        if let playlist { return try await music.playlistTracks(playlist.id, onProgress: emit) }
+                        if let album { return try await music.album(album.id).1 }
+                        if let artist { return try await music.artist(artist.id).1 }
+                        return []
+                    }
+                    for try await tracks in updates {
+                        try Task.checkCancellation(); guard epoch == accountGeneration else { throw CancellationError() }
+                        continuation.yield(tracks)
+                    }
+                    continuation.finish()
+                } catch { continuation.finish(throwing: error) }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
-    func cachedPlaylistTracks(_ id: Int64) -> [Track] { cached([Track].self, "playlist.\(id)")?.value ?? [] }
-    func playlistTracks(_ id: Int64, refresh: Bool = false) async throws -> [Track] {
-        try await readThrough([Track].self, key: "playlist.\(id)", refresh: refresh) { try await music.playlistTracks(id) }
-    }
     func albumTracks(_ id: Int64, refresh: Bool = false) async throws -> [Track] {
-        try await readThrough([Track].self, key: "album.\(id)", refresh: refresh, lifetime: 86400) { try await music.album(id).1 }
+        try await repository.value([Track].self, key: accountKey("cache.album.\(id)"), lifetime: Freshness.metadata, refresh: refresh) { [music] in try await music.album(id).1 }
     }
     func artistTracks(_ id: Int64, refresh: Bool = false) async throws -> [Track] {
-        try await readThrough([Track].self, key: "artist.\(id)", refresh: refresh, lifetime: 21600) { try await music.artist(id).1 }
+        try await repository.value([Track].self, key: accountKey("cache.artist.\(id)"), lifetime: Freshness.metadata, refresh: refresh) { [music] in try await music.artist(id).1 }
     }
     func artistAlbumPage(_ id: Int64, offset: Int, refresh: Bool = false) async throws -> ArtistAlbumPage {
-        try await readThrough(ArtistAlbumPage.self, key: "artistAlbums.\(id).\(offset)", refresh: refresh, lifetime: 21600) {
+        try await repository.value(ArtistAlbumPage.self, key: accountKey("cache.artistAlbums.\(id).\(offset)"), lifetime: Freshness.metadata, refresh: refresh) { [music] in
             let result = try await music.artistAlbums(id, offset: offset); return .init(albums: result.0, more: result.1)
         }
     }
+    func lyricUpdates(_ id: Int64, refresh: Bool = false) -> AsyncThrowingStream<[LyricLine], Error> {
+        repository.updates([LyricLine].self, key: accountKey("cache.lyrics.\(id)"), lifetime: Freshness.lyrics, refresh: refresh) { [music] in try await music.lyrics(id) }
+    }
     func lyricLines(_ id: Int64, refresh: Bool = false) async throws -> [LyricLine] {
-        try await readThrough([LyricLine].self, key: "lyrics.\(id)", refresh: refresh, lifetime: 86400) { try await music.lyrics(id) }
+        try await repository.value([LyricLine].self, key: accountKey("cache.lyrics.\(id)"), lifetime: Freshness.lyrics, refresh: refresh) { [music] in try await music.lyrics(id) }
+    }
+    func sourceUpdates(_ track: Track) -> AsyncThrowingStream<[MusicSource], Error> {
+        repository.updates([MusicSource].self, key: accountKey("cache.sources.\(track.id)"), lifetime: Freshness.metadata) { [music] in try await music.sources(for: track) }
     }
     func musicSources(_ track: Track, refresh: Bool = false) async throws -> [MusicSource] {
-        try await readThrough([MusicSource].self, key: "sources.\(track.id)", refresh: refresh, lifetime: 86400) { try await music.sources(for: track) }
+        try await repository.value([MusicSource].self, key: accountKey("cache.sources.\(track.id)"), lifetime: Freshness.metadata, refresh: refresh) { [music] in try await music.sources(for: track) }
     }
-    func invalidatePlaylist(_ id: Int64) { do { try persistence.remove(key: accountKey("cache.playlist.\(id)")) } catch { report(error) } }
+    func searchUpdates(_ text: String, kind: SearchKind, offset: Int = 0, refresh: Bool = false) -> AsyncThrowingStream<SearchResult, Error> {
+        repository.updates(SearchResult.self, key: accountKey("cache.search.\(kind.rawValue).\(offset).\(text.lowercased())"), lifetime: Freshness.search, refresh: refresh) { [music] in try await music.search(text, kind: kind, offset: offset) }
+    }
+    func invalidatePlaylist(_ id: Int64) async { do { try await repository.invalidate(accountKey("cache.playlist.\(id)")) } catch { report(error) } }
+    func cachePlaylist(_ tracks: [Track], id: Int64) async {
+        do { try await repository.store(tracks, key: accountKey("cache.playlist.\(id)")) } catch { report(error) }
+    }
     func clearMusicCache() {
-        do { try persistence.remove(prefix: accountKey("cache.")); Task { await ArtworkStore.shared.clear() }; notify("已清除封面与音乐资料缓存") } catch { report(error) }
+        preheater.stop()
+        Task {
+            do {
+                try await repository.reset(removing: accountKey("cache.")); await ArtworkStore.shared.clear()
+                await updateCacheUsage(); notify("已清除封面与音乐资料缓存")
+            } catch { report(error) }
+        }
     }
-    var metadataCacheBytes: Int { persistence.storedBytes(prefix: accountKey("cache.")) }
+    var metadataCacheBytes: Int { cacheBytes }
 }

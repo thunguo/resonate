@@ -36,10 +36,10 @@ final class YuyinUITests: XCTestCase {
     }
     func testNavigationAndPlayer() throws {
         let app = launch()
-        XCTAssertTrue(app.staticTexts["慢慢听。"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["listenTitle"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["miniPlayer"].exists)
         let playerFrame = app.buttons["miniPlayer"].frame
-        XCTAssertLessThanOrEqual(playerFrame.maxY, app.tabBars.firstMatch.frame.minY + 4, "播放条不能覆盖底部导航")
+        XCTAssertLessThanOrEqual(playerFrame.maxY, app.tabBars.buttons["听听"].frame.minY + 4, "播放条不能覆盖底部导航")
         app.buttons["miniPlayer"].tap()
         XCTAssertTrue(app.buttons["queueButton"].waitForExistence(timeout: 5))
         app.buttons["queueButton"].tap()
@@ -141,5 +141,31 @@ extension YuyinUITests {
         if ProcessInfo.processInfo.environment["YUYIN_CONTRAST_AUDIT"] == "1" {
             try player.performAccessibilityAudit(for: .contrast)
         }
+    }
+}
+
+
+extension YuyinUITests {
+    func testLyricsAndQueueRememberReadingPosition() {
+        let app = launch(["--player", "--reading-test"])
+        XCTAssertTrue(app.buttons["lyricsButton"].waitForExistence(timeout: 10))
+        app.buttons["lyricsButton"].tap()
+        XCTAssertTrue(app.buttons["lyricLine-0"].waitForExistence(timeout: 5))
+        app.swipeUp(); app.swipeUp()
+        let visibleLine = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "lyricLine-")).allElementsBoundByIndex.first { $0.isHittable && $0.frame.midY > app.frame.midY - 60 && $0.frame.midY < app.frame.midY + 100 }
+        XCTAssertNotNil(visibleLine)
+        let identifier = visibleLine?.identifier ?? ""
+        XCTAssertTrue(app.buttons["回到当前"].exists)
+        app.buttons["完成"].tap(); app.buttons["lyricsButton"].tap()
+        XCTAssertTrue(app.buttons[identifier].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons[identifier].isHittable)
+        XCTAssertTrue(app.buttons["回到当前"].exists)
+        app.buttons["完成"].tap(); app.buttons["queueButton"].tap()
+        XCTAssertTrue(app.navigationBars["播放队列"].waitForExistence(timeout: 5))
+        app.swipeUp(); app.swipeUp()
+        let title = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "队列歌曲 ")).allElementsBoundByIndex.first { $0.isHittable && $0.frame.midY < app.frame.midY }?.label
+        XCTAssertNotNil(title)
+        app.buttons["完成"].tap(); app.buttons["queueButton"].tap()
+        if let title { XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5)); XCTAssertTrue(app.staticTexts[title].isHittable) }
     }
 }

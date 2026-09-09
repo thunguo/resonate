@@ -2,12 +2,12 @@ import SwiftUI
 import MusicCore
 
 enum Palette {
-    static let background = adaptive(0xF6F3ED, 0x171816)
-    static let text = adaptive(0x22211F, 0xF0EDE6)
-    static let secondary = adaptive(0x5B574F, 0xAAA69D)
-    static let accent = adaptive(0x625D46, 0xC9BE9D)
-    static let surface = adaptive(0xEDE9E0, 0x242521)
-    static let line = adaptive(0xDBD6CC, 0x373932)
+    static let background = adaptive(0xF5F5F2, 0x111213)
+    static let text = adaptive(0x20211F, 0xF4F4EF)
+    static let secondary = adaptive(0x62655E, 0xA8ABA4)
+    static let accent = adaptive(0x4C5943, 0xCAD1BE)
+    static let surface = adaptive(0xE9EBE5, 0x20221F)
+    static let line = adaptive(0xD9DCD4, 0x343730)
     static func adaptive(_ light: UInt, _ dark: UInt) -> Color {
         Color(UIColor { trait in UIColor(hex: trait.userInterfaceStyle == .dark ? dark : light) })
     }
@@ -18,19 +18,68 @@ extension UIColor {
 struct Artwork: View {
     let url: URL?
     var size: CGFloat = 52
-    var radius: CGFloat = 6
+    var radius: CGFloat = 8
+    @Environment(\.displayScale) private var scale
     @State private var loaded: UIImage?
+    @State private var loadedURL: URL?
+    private var pixels: Int { ArtworkMemory.size(Int(max(1, size) * scale)) }
+    private var image: UIImage? {
+        guard let url else { return nil }
+        return ArtworkMemory.shared.image(url, pixels: pixels) ?? (loadedURL == url ? loaded : nil) ?? ArtworkMemory.shared.image(url, pixels: 160)
+    }
     var body: some View {
         Group {
-            if let loaded { Image(uiImage: loaded).resizable().scaledToFit() }
-            else { ZStack { Palette.surface; Image(systemName: "music.note").font(.system(size: max(18, size * 0.22), weight: .ultraLight)).foregroundStyle(Palette.accent.opacity(0.6)) } }
-        }.frame(width: size, height: size).background(Palette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: radius)).accessibilityHidden(true)
-            .task(id: url) {
-                loaded = nil
+            if let image { Image(uiImage: image).resizable().scaledToFit() }
+            else { Rectangle().fill(Palette.surface).overlay { Image(systemName: "music.note").font(.system(size: max(14, size * 0.19), weight: .ultraLight)).foregroundStyle(Palette.secondary.opacity(0.5)) } }
+        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).accessibilityHidden(true)
+            .onDisappear { loaded = nil; loadedURL = nil }
+            .task(id: "\(url?.absoluteString ?? "")-\(pixels)") {
                 guard let url else { return }
-                do { let image = try await ArtworkStore.shared.image(url); try Task.checkCancellation(); loaded = image } catch { }
+                do {
+                    let image = try await ArtworkStore.shared.image(url, pixels: pixels)
+                    try Task.checkCancellation(); loadedURL = url; loaded = image
+                } catch { }
             }
+    }
+}
+struct ArtworkAtmosphere: View {
+    let url: URL?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var scheme
+    @State private var tint: UIColor?
+    var body: some View {
+        Palette.background.overlay {
+            if let tint, !reduceTransparency, contrast != .increased {
+                LinearGradient(colors: [Color(tint).opacity(scheme == .dark ? 0.14 : 0.06), Color(tint).opacity(0.025), .clear], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        }.allowsHitTesting(false).task(id: url) {
+            guard let url else { tint = nil; return }
+            let color = await ArtworkStore.shared.tint(url)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.1 : 0.5)) { tint = color }
+        }
+    }
+}
+struct MusicPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.975 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+struct DelayedProgress: View {
+    var title = "正在读取…"
+    @State private var visible = false
+    @State private var slow = false
+    var body: some View {
+        Group {
+            if visible { VStack(spacing: 12) { ProgressView(title); if slow { Text("比平时慢一些，可以稍后再试。").font(.footnote).foregroundStyle(Palette.secondary) } }.frame(maxWidth: .infinity).padding(.vertical, 20) }
+        }.task {
+            do { try await Task.sleep(for: .milliseconds(300)); visible = true; try await Task.sleep(for: .seconds(8)); slow = true } catch { }
+        }
     }
 }
 struct Eyebrow: View {
@@ -47,7 +96,7 @@ struct IconButton: View {
     let label: String
     var size: CGFloat = 20
     var action: () -> Void
-    var body: some View { Button(action: action) { Image(systemName: symbol).font(.system(size: size, weight: .regular)).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.buttonStyle(.plain).foregroundStyle(Palette.text).accessibilityLabel(label) }
+    var body: some View { Button { UISelectionFeedbackGenerator().selectionChanged(); action() } label: { Image(systemName: symbol).font(.system(size: size, weight: .regular)).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.buttonStyle(MusicPressStyle()).foregroundStyle(Palette.text).accessibilityLabel(label) }
 }
 struct FilledButton: View {
     let title: String
@@ -55,7 +104,7 @@ struct FilledButton: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) { HStack(spacing: 8) { if let symbol { Image(systemName: symbol) }; Text(title).fontWeight(.medium) }.frame(maxWidth: .infinity).frame(minHeight: 50) }
-            .buttonStyle(.plain).foregroundStyle(Palette.background).background(Palette.accent, in: RoundedRectangle(cornerRadius: 14))
+            .buttonStyle(MusicPressStyle()).foregroundStyle(Palette.background).background(Palette.accent, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 struct EmptyState: View {
@@ -87,7 +136,7 @@ struct TrackRow: View {
                     if let index { Text(String(index)).font(.subheadline.monospacedDigit()).foregroundStyle(Palette.secondary).frame(width: 24) }
                     Artwork(url: track.album.artwork, size: 50)
                     VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 6) { Text(track.title).foregroundStyle(Palette.text).lineLimit(2); if store.player.current?.id == track.id { Image(systemName: "waveform").font(.caption).foregroundStyle(Palette.accent) } }
+                        HStack(spacing: 6) { Text(track.title).foregroundStyle(Palette.text).lineLimit(2); if store.player.currentTrackID == track.id { Image(systemName: "waveform").font(.caption).foregroundStyle(Palette.accent) } }
                         Text(subtitle ?? track.artistName).font(.subheadline).foregroundStyle(Palette.secondary).lineLimit(1)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     if track.availability == .preview { Text("试听").font(.caption2).foregroundStyle(Palette.secondary) }
