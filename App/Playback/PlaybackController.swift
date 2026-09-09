@@ -55,6 +55,17 @@ struct PlaybackSnapshot: Equatable {
     var offlineURL: ((Track) -> URL?)?
     var continuationTracks: (() async throws -> [Track])?
     var previousQueue: QueueState?
+    private struct AuditionReturnPoint {
+        var queue: QueueState
+        var playing: Bool
+        var previousQueue: QueueState?
+    }
+    private(set) var isAuditioning = false
+    @ObservationIgnored private var auditionReturn: AuditionReturnPoint?
+    var restorableQueue: QueueState {
+        if let auditionReturn { return auditionReturn.queue }
+        var saved = queue; saved.position = position; return saved
+    }
     @ObservationIgnored private let music: MusicService
     @ObservationIgnored private let player = AVQueuePlayer()
     @ObservationIgnored private var observation: NSKeyValueObservation?
@@ -120,7 +131,27 @@ struct PlaybackSnapshot: Equatable {
     func play(_ tracks: [Track], at index: Int = 0, origin: QueueOrigin = .playlist) {
         guard !tracks.isEmpty else { return }
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
-        previousQueue = queue; queue.replace(tracks, startingAt: index, origin: origin); retryCount = 0; loadCurrent()
+        previousQueue = auditionReturn?.queue ?? queue; auditionReturn = nil; isAuditioning = false; queue.replace(tracks, startingAt: index, origin: origin); retryCount = 0; loadCurrent()
+    }
+    @discardableResult func beginAudition(_ track: Track) -> Bool {
+        guard !restorationPending else { error = "队列正在恢复，请稍后试听。"; return false }
+        if auditionReturn == nil { save(); auditionReturn = .init(queue: restorableQueue, playing: wantsPlayback, previousQueue: previousQueue) }
+        isAuditioning = true; queue.replace([track], origin: .ai); retryCount = 0; loadCurrent(); return true
+    }
+    func endAudition() {
+        guard let saved = auditionReturn else { return }
+        auditionReturn = nil; isAuditioning = false
+        if saved.queue.entries.isEmpty { clear(); return }
+        restore(saved.queue); previousQueue = saved.previousQueue
+        retryCount = 0
+        if saved.playing { loadCurrent() }
+        else {
+            loadingTask?.cancel(); seekTask?.cancel(); isSeeking = false; loadID = UUID()
+            discardPrepared(); player.pause(); player.removeAllItems(); itemObservation = nil
+            wantsPlayback = false; resolving = false; isPlaying = false; isBuffering = false; error = nil; resource = nil; nowPlayingArtwork = nil
+            preparationMeasurement?.end(.cancelled); preparationMeasurement = nil
+            save(); updateNowPlaying()
+        }
     }
     func toggle() { snapshot.offersPause ? pause() : resume() }
     func finishRestoration(_ state: QueueState?) {
@@ -145,10 +176,11 @@ struct PlaybackSnapshot: Equatable {
     }
     func pause() { if restorationPending { resumeAfterRestoration = false; isBuffering = false; return }; wantsPlayback = false; player.pause(); isPlaying = false; isBuffering = false; save(); updateNowPlaying() }
     func next() {
+        if isAuditioning { endAudition(); return }
         if let preparedQueue = validPreparedQueue { queue = preparedQueue; retryCount = 0; loadCurrent() }
         else if queue.advance(manual: true) { retryCount = 0; loadCurrent() } else { pause() }
     }
-    func previous() { queue.position = position; queue.previous(); retryCount = 0; loadCurrent() }
+    func previous() { if isAuditioning { endAudition(); return }; queue.position = position; queue.previous(); retryCount = 0; loadCurrent() }
     func jump(_ id: UUID) { guard queue.entries.contains(where: { $0.id == id }) else { return }; queue.currentID = id; queue.position = 0; retryCount = 0; loadCurrent() }
     func seek(_ seconds: Double) {
         guard seconds.isFinite else { return }
@@ -173,18 +205,21 @@ struct PlaybackSnapshot: Equatable {
             updateNowPlaying()
         }
     }
-    func enqueue(_ tracks: [Track], next: Bool = false) { if restorationPending { pendingAppends.append((tracks, next)); return }; previousQueue = queue; queue.append(tracks, next: next); save() }
+    func enqueue(_ tracks: [Track], next: Bool = false) { if isAuditioning { endAudition() }; if restorationPending { pendingAppends.append((tracks, next)); return }; previousQueue = queue; queue.append(tracks, next: next); save() }
     @discardableResult func apply(_ arrangement: Arrangement) -> Bool {
+        if isAuditioning { endAudition() }
         if let signature = arrangement.queueSignature, signature != queue.arrangementSignature { error = "队列已经变化，请重新编排后再应用。"; return false }
         previousQueue = queue; queue.applyArrangement(arrangement.tracks); save(); return true
     }
     func undo() {
+        if isAuditioning { endAudition() }
         guard let previousQueue else { return }
         let changedCurrent = queue.currentID != previousQueue.currentID
         queue = previousQueue; self.previousQueue = nil
         if changedCurrent { loadCurrent(startPlaying: wantsPlayback) } else { save() }
     }
     func clear() {
+        auditionReturn = nil; isAuditioning = false
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
         seekTask?.cancel(); isSeeking = false; isInterrupted = false; preparationMeasurement?.end(.cancelled); preparationMeasurement = nil; bufferingMeasurement?.end(.cancelled); bufferingMeasurement = nil
         loadingTask?.cancel(); prefetchTask?.cancel(); prefetched = nil; loadID = UUID(); player.pause(); player.removeAllItems()
@@ -200,8 +235,8 @@ struct PlaybackSnapshot: Equatable {
             do { try await Task.sleep(for: .seconds(minutes * 60)); self?.pause(); self?.sleepDate = nil } catch { }
         }
     }
-    func save() { guard !restorationPending else { return }; currentTrackID = current?.id; queue.position = position; onSave?(queue); onCheckpoint?(.init(currentID: queue.currentID, position: position)); onStateChanged?(); prepareNext() }
-    private func checkpoint() { onCheckpoint?(.init(currentID: queue.currentID, position: position)) }
+    func save() { guard !restorationPending else { return }; if isAuditioning { currentTrackID = current?.id; onStateChanged?(); return }; currentTrackID = current?.id; queue.position = position; onSave?(queue); onCheckpoint?(.init(currentID: queue.currentID, position: position)); onStateChanged?(); prepareNext() }
+    private func checkpoint() { guard !isAuditioning else { return }; onCheckpoint?(.init(currentID: queue.currentID, position: position)) }
     private func discardPrepared() {
         prefetchTask?.cancel(); prefetchKey = nil; prefetched = nil; preparedQueue = nil
         for item in player.items().dropFirst() { player.remove(item) }
@@ -334,12 +369,13 @@ struct PlaybackSnapshot: Equatable {
         if !isBuffering { bufferingMeasurement?.end(isPlaying ? .success : .cancelled); bufferingMeasurement = nil }
         if isPlaying { preparationMeasurement?.end(.success); preparationMeasurement = nil }
         if isPlaying, !reportedStart, let track = current {
-            reportedStart = true; onTrackPlayed?(track)
+            reportedStart = true; if !isAuditioning { onTrackPlayed?(track) }
             if let attemptStartedAt { onPlaybackStart?(max(0, Date().timeIntervalSince(attemptStartedAt))) }
         }
         updateNowPlaying(); onStateChanged?()
     }
     private func ended() {
+        if isAuditioning { endAudition(); return }
         position = duration; queue.position = duration
         guard wantsPlayback else { reachedEnd = true; return }
         if queue.repeatMode == .one {

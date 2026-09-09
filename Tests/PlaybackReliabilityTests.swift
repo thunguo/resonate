@@ -58,3 +58,33 @@ import MusicCore
         XCTAssertEqual(p.snapshot.phase, .paused); XCTAssertEqual(p.current?.id, 1)
     }
 }
+
+extension PlaybackReliabilityTests {
+    func testAuditionRestoresPausedQueueAndDoesNotPersistAudition() async {
+        let p = controller(); defer { p.clear() }
+        var original = QueueState(); original.replace([track(1), track(2)], origin: .album); original.position = 4
+        p.restore(original)
+        var saved: [QueueState] = []; p.onSave = { saved.append($0) }
+        XCTAssertTrue(p.beginAudition(track(3)))
+        let playing = await wait { p.isPlaying }; XCTAssertTrue(playing)
+        p.endAudition()
+        XCTAssertEqual(p.queue, original); XCTAssertEqual(p.position, 4); XCTAssertFalse(p.isPlaying)
+        XCTAssertFalse(p.isAuditioning); XCTAssertTrue(saved.allSatisfy { !$0.entries.contains { $0.track.id == 3 } })
+    }
+    func testAuditionEndResumesOriginalPlayingIntentAndExplicitPlayDiscardsReturn() async {
+        let p = controller(); defer { p.clear() }
+        p.play([track(1), track(2)])
+        let playing = await wait { p.isPlaying }; XCTAssertTrue(playing)
+        p.seek(3); let sought = await wait { p.position >= 3 }; XCTAssertTrue(sought)
+        let originalIDs = p.queue.entries.map(\.id)
+        p.beginAudition(track(3)); p.seek(9.8)
+        let restored = await wait { !p.isAuditioning && p.current?.id == 1 && p.isPlaying }; XCTAssertTrue(restored)
+        XCTAssertEqual(p.queue.entries.map(\.id), originalIDs); XCTAssertGreaterThanOrEqual(p.position, 3)
+        p.beginAudition(track(3)); p.play([track(4)])
+        p.endAudition(); XCTAssertEqual(p.current?.id, 4); XCTAssertFalse(p.isAuditioning)
+    }
+    func testClearDuringAuditionCannotRestoreFormerAccountQueue() {
+        let p = controller(); p.play([track(1)]); p.beginAudition(track(2)); p.clear(); p.endAudition()
+        XCTAssertNil(p.current); XCTAssertFalse(p.isAuditioning); XCTAssertTrue(p.restorableQueue.entries.isEmpty)
+    }
+}

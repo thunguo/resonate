@@ -143,6 +143,7 @@ struct TrackRow: View {
     var index: Int? = nil
     var subtitle: String? = nil
     var play: (() -> Void)? = nil
+    var audition = false
     @State private var addToPlaylist = false
     var body: some View {
         HStack(spacing: 12) {
@@ -156,7 +157,7 @@ struct TrackRow: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                     if track.availability == .preview { Text("试听").font(.caption2).foregroundStyle(Palette.secondary) }
                 }.contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityLabel("播放 \(track.title)，\(track.artistName)")
+            }.buttonStyle(.plain).accessibilityLabel("\(audition ? "试听" : "播放") \(track.title)，\(track.artistName)")
             Menu {
                 Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") { store.player.enqueue([track], next: true); store.notify("已设为下一首") }
                 Button("加入队列", systemImage: "text.append") { store.player.enqueue([track]); store.notify("已加入队列") }

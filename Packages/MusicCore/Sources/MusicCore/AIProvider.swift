@@ -96,6 +96,8 @@ public struct AIProvider: Sendable {
         }
         let (lines, response) = try await streaming.lines(for: makeRequest(messages: messages, stream: true, maxTokens: 2200))
         try Self.checkStatus(response.statusCode)
+        let buffer = StreamTextBuffer(receive: onText)
+        do {
         var text = "", nonSSE = "", wasTruncated = false, receivedSSE = false, finished = false
         for try await line in lines {
             try Task.checkCancellation()
@@ -103,21 +105,25 @@ public struct AIProvider: Sendable {
             receivedSSE = true
             let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
             if payload == "[DONE]" { finished = true; break }
-            guard let data = payload.data(using: .utf8), let j = try? JSONDecoder().decode(JSONValue.self, from: data) else { continue }
+            if payload.isEmpty { continue }
+            guard let data = payload.data(using: .utf8), let j = try? JSONDecoder().decode(JSONValue.self, from: data) else { throw MusicError.invalidResponse }
             if !j["error"].isNull { throw MusicError.message("模型生成中断，请稍后重试。") }
             if let choice = j["choices"].array.first {
                 text += choice["delta"]["content"].string
                 wasTruncated = choice["finish_reason"].string == "length" || wasTruncated
                 finished = !choice["finish_reason"].string.isEmpty || finished
-                await onText(text)
+                await buffer.submit(text)
             }
         }
         if text.isEmpty, let data = nonSSE.data(using: .utf8), let j = try? JSONDecoder().decode(JSONValue.self, from: data), let choice = j["choices"].array.first {
-            text = choice["message"]["content"].string; wasTruncated = choice["finish_reason"].string == "length"; await onText(text)
+            text = choice["message"]["content"].string; wasTruncated = choice["finish_reason"].string == "length"; await buffer.submit(text)
         }
+        await buffer.finish()
+        try Task.checkCancellation()
         guard !text.isEmpty else { throw MusicError.invalidResponse }
         if wasTruncated { throw MusicError.message("回复长度达到上限，已保留收到的内容。") }
         if receivedSSE && !finished { throw MusicError.message("模型连接提前结束，已保留收到的内容，请重试。") }
         return text
+        } catch { await buffer.finish(); throw error }
     }
 }

@@ -24,6 +24,9 @@ public struct Arrangement: Identifiable, Codable, Sendable {
     public var queueSignature: String? = nil
     public var expectedDuration: Double? = nil
     public var notes: [String]? = nil
+    public var savedPlaylist: Playlist? = nil
+    public var saveConfirmed: Bool? = nil
+    public var creationUncertain: Bool? = nil
     public var displayedTracks: [Track] { previewEntries?.map(\.track) ?? tracks }
     public var remainingDuration: Double { expectedDuration ?? duration }
     public var duration: Double { tracks.reduce(0) { $0 + $1.duration } }

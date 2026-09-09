@@ -198,3 +198,29 @@ extension YuyinUITests {
         XCTAssertTrue(app.staticTexts["曲目31"].exists)
     }
 }
+
+extension YuyinUITests {
+    func testArrangementFailurePreservesSavedResultAndCollapsesPrompt() {
+        let app = launch(["--ai-result", "--saved-ai-result"])
+        XCTAssertTrue(app.buttons["修改需求"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textFields["arrangementPrompt"].exists)
+        XCTAssertTrue(app.buttons["已保存到网易云"].exists)
+        let adjustment = app.buttons["更熟悉"]
+        for _ in 0..<3 where !adjustment.isHittable { app.swipeUp() }
+        adjustment.tap()
+        XCTAssertTrue(app.staticTexts["留一点时间，慢慢走"].exists)
+        XCTAssertTrue(app.buttons["已保存到网易云"].exists)
+    }
+    func testAuditionOffersImmediateExitAndRestoresOriginalTrack() {
+        let app = launch(["--ai-result", "--audio-test"])
+        let audition = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "试听 ")).firstMatch
+        XCTAssertTrue(audition.waitForExistence(timeout: 5))
+        for _ in 0..<3 where !audition.isHittable || audition.frame.maxY > app.frame.maxY - 160 { app.swipeUp() }
+        audition.tap()
+        let stop = app.buttons["endAudition"]; XCTAssertTrue(stop.waitForExistence(timeout: 5)); XCTAssertTrue(stop.isHittable)
+        stop.tap(); app.buttons["完成"].tap()
+        app.buttons["miniPlayer"].tap()
+        XCTAssertTrue(app.staticTexts["测试音频 1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["mainPlayPause"].value as? String, "已暂停")
+    }
+}

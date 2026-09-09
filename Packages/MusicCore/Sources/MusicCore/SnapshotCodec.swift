@@ -20,9 +20,11 @@ public struct ExplanationRecord: Codable, Sendable {
     public var history: [ChatMessage]
     public var updatedAt: Date
     public var validationMessage: String?
-    public init(trackID: Int64, text: String, sources: [MusicSource], history: [ChatMessage], updatedAt: Date = .now, validationMessage: String? = nil) {
+    public var draftText: String?
+    public var draftQuestion: String?
+    public init(trackID: Int64, text: String, sources: [MusicSource], history: [ChatMessage], updatedAt: Date = .now, validationMessage: String? = nil, draftText: String? = nil, draftQuestion: String? = nil) {
         self.trackID = trackID; self.text = text; self.sources = sources; self.history = history; self.updatedAt = updatedAt
-        self.validationMessage = validationMessage
+        self.validationMessage = validationMessage; self.draftText = draftText; self.draftQuestion = draftQuestion
     }
 }
 public enum LibrarySort: String, Codable, CaseIterable, Identifiable, Sendable {

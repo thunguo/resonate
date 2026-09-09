@@ -419,7 +419,8 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     }
     func saveHomeSnapshot() {
         var summary = QueueState()
-        if let current = player.queue.current { summary.entries = [current]; summary.currentID = current.id; summary.position = player.position }
+        let restored = player.restorableQueue
+        if let current = restored.current { summary.entries = [current]; summary.currentID = current.id; summary.position = restored.position }
         saveInBackground(HomeSnapshot(tracks: Array(library.likedTracks.prefix(12)), discoveries: Array(discoveries.prefix(6)), currentQueue: summary), key: accountKey("home"))
     }
     private func prepareCurrentContext() {

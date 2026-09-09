@@ -23,8 +23,9 @@ struct PlayerView: View {
                     VStack(spacing: 8) {
                         HStack {
                             IconButton(symbol: "chevron.down", label: "收起播放器") { dismiss() }.accessibilityIdentifier("closePlayer")
-                            Spacer(); Eyebrow(text: store.player.snapshot.phase.label); Spacer(); moreMenu(track)
+                            Spacer(); Eyebrow(text: (store.player.isAuditioning ? "试听 · " : "") + store.player.snapshot.phase.label); Spacer(); moreMenu(track)
                         }.padding(.horizontal, 20)
+                        if store.player.isAuditioning { Button("结束试听，回到原队列") { store.player.endAudition() }.font(.subheadline).frame(minHeight: 44) }
                         ScrollView {
                             VStack(alignment: .leading, spacing: 16) {
                                 Artwork(url: track.album.artwork, size: artworkSize(geometry), radius: 12)
