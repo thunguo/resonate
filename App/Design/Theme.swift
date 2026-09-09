@@ -142,6 +142,8 @@ struct TrackRow: View {
     let track: Track
     var index: Int? = nil
     var subtitle: String? = nil
+    var continuePlaying: (() -> Void)? = nil
+    var removeFromHistory: (() -> Void)? = nil
     var play: (() -> Void)? = nil
     var audition = false
     @State private var addToPlaylist = false
@@ -159,12 +161,14 @@ struct TrackRow: View {
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("\(audition ? "试听" : "播放") \(track.title)，\(track.artistName)")
             Menu {
+                if let continuePlaying { Button("从这里继续听", systemImage: "play.fill", action: continuePlaying) }
                 Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") { store.player.enqueue([track], next: true); store.notify("已设为下一首") }
                 Button("加入队列", systemImage: "text.append") { store.player.enqueue([track]); store.notify("已加入队列") }
                 Button(store.likedIDs.contains(track.id) ? "取消喜欢" : "喜欢", systemImage: store.likedIDs.contains(track.id) ? "heart.slash" : "heart") { Task { await store.toggleLike(track) } }
                 Button("加入歌单", systemImage: "plus") { if store.requireLogin() { addToPlaylist = true } }
                 if store.downloads.isAuthorized { Button("下载", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); store.notify("已加入下载") } catch { store.report(error) } } }
                 ShareLink(item: track.webURL) { Label("分享歌曲", systemImage: "square.and.arrow.up") }
+                if let removeFromHistory { Button("移除这条聆听记录", systemImage: "clock.badge.xmark", role: .destructive, action: removeFromHistory) }
             } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).foregroundStyle(Palette.secondary) }.accessibilityLabel("\(track.title)的更多操作")
         }.padding(.vertical, 7)
         .sheet(isPresented: $addToPlaylist) { PlaylistPicker(tracks: [track]) }

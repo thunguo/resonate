@@ -203,7 +203,7 @@ extension YuyinUITests {
     func testArrangementFailurePreservesSavedResultAndCollapsesPrompt() {
         let app = launch(["--ai-result", "--saved-ai-result"])
         XCTAssertTrue(app.buttons["修改需求"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.textFields["arrangementPrompt"].exists)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "arrangementPrompt").firstMatch.exists)
         XCTAssertTrue(app.buttons["已保存到网易云"].exists)
         let adjustment = app.buttons["更熟悉"]
         for _ in 0..<3 where !adjustment.isHittable { app.swipeUp() }
@@ -230,5 +230,88 @@ extension YuyinUITests {
         app.buttons["miniPlayer"].tap()
         XCTAssertTrue(app.staticTexts["测试音频 1"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["mainPlayPause"].value as? String, "已暂停")
+    }
+}
+
+extension YuyinUITests {
+    func testRecentListeningSearchRemovalAndQueuePreservation() {
+        let app = launch(["--collection-test", "--audio-test", "--library"])
+        app.buttons["recentListening"].tap()
+        let search = app.textFields["historySearch"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "最近听过"; shot.lifetime = .keepAlways; add(shot)
+        search.tap(); search.typeText("Guitar")
+        XCTAssertTrue(app.buttons["旅行的意义(Guitar Ver.)的更多操作"].exists)
+        app.buttons["清空搜索"].tap()
+        search.typeText("Guitar")
+        app.buttons["旅行的意义(Guitar Ver.)的更多操作"].tap()
+        app.buttons["移除这条聆听记录"].tap()
+        XCTAssertTrue(app.staticTexts["没有找到这首歌"].waitForExistence(timeout: 5))
+        app.buttons["清空搜索"].tap()
+        search.typeText("嫉妒")
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "播放 嫉妒")).firstMatch.tap()
+        app.buttons["miniPlayer"].tap(); XCTAssertTrue(app.buttons["queueButton"].waitForExistence(timeout: 5)); app.buttons["queueButton"].tap()
+        XCTAssertTrue(app.staticTexts["测试音频 2"].waitForExistence(timeout: 5))
+    }
+
+    func testArrangementArchiveKeepsRenamesAndSeparatesNewRequest() {
+        let app = launch(["--collection-test", "--library"])
+        app.buttons["arrangementLibrary"].tap()
+        XCTAssertTrue(app.staticTexts["夜晚，慢慢走"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "我的编排"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["夜晚，慢慢走的编排操作"].tap(); app.buttons["保留这份"].tap()
+        app.buttons["夜晚，慢慢走的编排操作"].tap(); XCTAssertTrue(app.buttons["取消保留"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["修改名称"].tap()
+        let field = app.alerts.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "夜晚，慢慢走".count) + "Evening")
+        app.alerts.buttons["保存"].tap()
+        XCTAssertTrue(app.staticTexts["Evening"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "openArrangement-", "Evening")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["keepArrangement"].label, "已保留在本机")
+        app.buttons["完成"].tap()
+        app.buttons["newArrangement"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "arrangementPrompt").firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["keepArrangement"].exists)
+        app.buttons["完成"].tap()
+        app.buttons["Evening的编排操作"].tap(); app.buttons["照这个需求再选一组"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "arrangementPrompt").firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "arrangementPrompt").firstMatch.value as? String, "收藏里的歌，陪我散步三十分钟")
+    }
+
+    func testHomeControlFollowsActualPlaybackAndPause() {
+        let app = launch(["--collection-test", "--audio-test"])
+        let button = app.buttons["continuePlayback"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        button.tap(); waitForValue("正在播放", on: button)
+        XCTAssertEqual(button.label, "暂停")
+        button.tap(); waitForValue("已暂停", on: button)
+        XCTAssertEqual(button.label, "继续播放")
+    }
+}
+
+extension YuyinUITests {
+    func testCollectionPagesDarkLargeTextAndLocalDeletion() {
+        let light = launch(["--collection-test", "--library"])
+        light.buttons["recentListening"].tap()
+        XCTAssertTrue(light.textFields["historySearch"].waitForExistence(timeout: 5))
+        let normal = XCTAttachment(screenshot: light.screenshot()); normal.name = "最近听过-产品"; normal.lifetime = .keepAlways; add(normal)
+        light.terminate()
+        let app = launch(["--collection-test", "--library", "--dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXL"])
+        XCTAssertTrue(app.buttons["recentListening"].waitForExistence(timeout: 5)); XCTAssertTrue(app.buttons["recentListening"].isHittable)
+        app.buttons["recentListening"].tap()
+        XCTAssertTrue(app.textFields["historySearch"].waitForExistence(timeout: 5))
+        let history = XCTAttachment(screenshot: app.screenshot()); history.name = "最近听过-深色大字体"; history.lifetime = .keepAlways; add(history)
+        app.navigationBars.buttons["返回"].tap()
+        app.buttons["arrangementLibrary"].tap()
+        XCTAssertTrue(app.buttons["newArrangement"].waitForExistence(timeout: 5)); XCTAssertTrue(app.buttons["newArrangement"].isHittable)
+        let archive = XCTAttachment(screenshot: app.screenshot()); archive.name = "我的编排-深色大字体"; archive.lifetime = .keepAlways; add(archive)
+        let menu = app.buttons["安静的午后的编排操作"]
+        for _ in 0..<4 where !menu.isHittable { app.swipeUp() }
+        menu.tap(); app.buttons["删除本机编排"].tap()
+        XCTAssertTrue(app.buttons["删除本机编排"].waitForExistence(timeout: 5)); app.buttons["删除本机编排"].tap()
+        let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["安静的午后的编排操作"])
+        XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed, app.debugDescription)
     }
 }

@@ -53,7 +53,7 @@ struct SettingsView: View {
             .confirmationDialog("退出将清除这个账号的本地收藏缓存、下载和播放记录。网易云上的收藏不受影响。", isPresented: $confirmLogout, titleVisibility: .visible) { Button("退出并清除本机数据", role: .destructive) { Task { await store.logout() } } }
             .confirmationDialog("清除本机播放与搜索记录？", isPresented: $confirmHistory, titleVisibility: .visible) { Button("清除记录", role: .destructive) { store.clearHistory() } }
             .confirmationDialog("清除封面、歌词与音乐资料缓存？需要时会重新读取，不影响收藏和下载。", isPresented: $confirmCache, titleVisibility: .visible) { Button("清除缓存", role: .destructive) { store.clearMusicCache() } }
-            .confirmationDialog("清除这个账号在本机保存的 AI 编排与解读记录？网易云歌单不受影响。", isPresented: $confirmAI, titleVisibility: .visible) { Button("清除 AI 记录", role: .destructive) { store.clearAIHistory() } }
+            .confirmationDialog("清除这个账号在本机保存的全部 AI 编排与解读记录，包括已保留的编排？网易云歌单不受影响。", isPresented: $confirmAI, titleVisibility: .visible) { Button("清除 AI 记录", role: .destructive) { store.clearAIHistory() } }
     }
 }
 struct PreferenceEditor: View {

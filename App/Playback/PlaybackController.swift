@@ -134,6 +134,17 @@ struct PlaybackSnapshot: Equatable {
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
         previousQueue = auditionReturn?.queue ?? queue; auditionReturn = nil; isAuditioning = false; queue.replace(tracks, startingAt: index, origin: origin); retryCount = 0; loadCurrent()
     }
+    @discardableResult func playNow(_ track: Track) -> Bool {
+        guard !restorationPending else { operationError = "队列正在恢复，请稍后播放。"; return false }
+        if isAuditioning { endAudition() }
+        if current?.id == track.id { resume(); return true }
+        previousQueue = restorableQueue
+        let hadCurrent = queue.current != nil
+        queue.append([track], next: true)
+        if hadCurrent { queue.advance(manual: true) }
+        else { queue.currentID = queue.entries.last?.id; queue.position = 0 }
+        retryCount = 0; loadCurrent(); return true
+    }
     @discardableResult func beginAudition(_ track: Track) -> Bool {
         guard !restorationPending else { operationError = "队列正在恢复，请稍后试听。"; return false }
         if auditionReturn == nil { save(); auditionReturn = .init(queue: restorableQueue, playing: wantsPlayback, previousQueue: previousQueue) }

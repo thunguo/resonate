@@ -6,6 +6,7 @@ struct ArrangementView: View {
     @Environment(\.dismiss) private var dismiss
     let initialPrompt: String
     var adjustingQueue = false
+    var existingArrangement: Arrangement? = nil
     @State private var prompt = ""
     @State private var editingPrompt = false
     @State private var arrangement: Arrangement?
@@ -60,9 +61,9 @@ struct ArrangementView: View {
                 .sheet(isPresented: Binding(get: { store.showLogin && !settings }, set: { store.showLogin = $0 })) { LoginView() }
         }.onAppear {
             guard !restored else { return }; restored = true; prompt = initialPrompt; resultAccountID = store.accountGeneration
-            if let saved = store.recentArrangements.first(where: { adjustingQueue ? $0.queueSignature == store.player.queue.arrangementSignature : $0.queueSignature == nil }) {
+            if let saved = existingArrangement {
                 arrangement = saved; self.saved = saved.saveConfirmed == true; createdPlaylist = saved.savedPlaylist; createUncertain = saved.creationUncertain == true
-                if prompt.isEmpty { prompt = saved.intent.constraints }
+                if prompt.isEmpty { prompt = saved.originalPrompt ?? saved.intent.constraints }
             }
         }.onChange(of: store.accountGeneration) { _, _ in cancel(); arrangement = nil; saved = false; createdPlaylist = nil; dismiss() }
         .onDisappear { cancel(); store.player.endAudition() }.interactiveDismissDisabled(saving)
@@ -79,14 +80,20 @@ struct ArrangementView: View {
                 HStack(spacing: 12) { ForEach(Array(result.displayedTracks.prefix(4).enumerated()), id: \.offset) { _, track in Artwork(url: track.album.artwork, size: 112, radius: 10) } }
             }.padding(.vertical, 8)
             SectionHeading(title: result.title, subtitle: "\(result.displayedTracks.count) 首 · \(timeLabel(result.remainingDuration)) · \(result.displayedTracks.filter { result.likedIDs.contains($0.id) }.count) 首收藏")
+            Button {
+                if !store.recentArrangements.contains(where: { $0.id == result.id }) {
+                    guard let resultAccountID, store.saveArrangement(result, for: resultAccountID) else { return }
+                }
+                _ = store.keepArrangement(result.id, kept: !isKept(result.id))
+            } label: { Label(isKept(result.id) ? "已保留在本机" : "保留这份", systemImage: isKept(result.id) ? "bookmark.fill" : "bookmark").font(.subheadline).frame(minHeight: 44) }.buttonStyle(MusicPressStyle()).accessibilityIdentifier("keepArrangement")
             Text("本次需求：" + result.intent.constraints).font(.footnote).foregroundStyle(Palette.secondary)
             Text(result.intent.allowDiscovery ? "以收藏为主，新歌最多 \(Int(result.intent.discoveryFraction * 100))%" : "只听收藏").font(.footnote).foregroundStyle(Palette.secondary)
             if result.queueSignature != nil { Text("预计时长包含正在播放的剩余部分和手动固定的歌曲。").font(.caption).foregroundStyle(Palette.secondary) }
             ForEach(result.notes ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(Palette.secondary) }
             Text(result.explanation).font(.subheadline).foregroundStyle(Palette.secondary).lineSpacing(4)
             HStack(spacing: 14) {
-                FilledButton(title: adjustingQueue ? "应用到接下来" : "播放整组", symbol: "play.fill") { if adjustingQueue { guard store.player.apply(result) else { error = store.player.operationError; return } } else { store.player.play(result.tracks, origin: .ai) }; store.recordAIApplication(); if adjustingQueue { store.notify("队列已更新，可撤销") } }
-                IconButton(symbol: "text.append", label: "加入队列") { store.player.enqueue(result.tracks); store.notify("已加入队列") }
+                FilledButton(title: adjustingQueue ? "应用到接下来" : "播放整组", symbol: "play.fill") { if adjustingQueue { guard store.player.apply(result) else { error = store.player.operationError; return } } else { store.player.play(result.displayedTracks, origin: .ai) }; store.recordAIApplication(); if adjustingQueue { store.notify("队列已更新，可撤销") } }
+                IconButton(symbol: "text.append", label: "加入队列") { store.player.enqueue(result.displayedTracks); store.notify("已加入队列") }
             }
             ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 8) { ForEach(["少些人声", "更熟悉", "换几首"], id: \.self) { adjustment in Button { if adjustment == "换几首" { excludedIDs.formUnion(result.tracks.suffix(min(3, result.tracks.count)).map(\.id)) }; prompt = String(prompt.prefix(1200)) + "；" + adjustment; generate() } label: { Text(adjustment).font(.subheadline).padding(.horizontal, 14).frame(minHeight: 44).background(Palette.surface, in: Capsule()) }.buttonStyle(.plain).disabled(progress != nil) } } }
             ForEach(Array(result.displayedTracks.enumerated()), id: \.offset) { index, track in
@@ -98,6 +105,7 @@ struct ArrangementView: View {
             if store.player.previousQueue != nil { Button("撤销上次队列更改") { store.player.undo() }.font(.subheadline).frame(minHeight: 44) }
         }
     }
+    private func isKept(_ id: UUID) -> Bool { store.recentArrangements.first { $0.id == id }?.isKept == true }
     private func rowLabel(_ result: Arrangement, index: Int, track: Track) -> String {
         if let entries = result.previewEntries, entries.indices.contains(index) {
             if index == 0 { return "保留当前 · " + track.artistName }
@@ -117,8 +125,8 @@ struct ArrangementView: View {
             do {
                 let intelligence = try MusicIntelligence(music: store.music, provider: store.provider())
                 progress = "开始编排…"
-                let result = try await intelligence.arrange(request: request, library: store.library.likedTracks, discoveries: store.discoveries, preferences: store.preferences.musicTaste, context: context) { message in await MainActor.run { if generation == token && accountID == store.accountGeneration { progress = message } } }
-                try Task.checkCancellation(); guard token == generation, accountID == store.accountGeneration else { return }; arrangement = result; saved = false; saveMessage = nil; createdPlaylist = nil; createUncertain = false; editingPrompt = false; store.saveArrangement(result, for: accountID); store.recordAIGeneration()
+                var result = try await intelligence.arrange(request: request, library: store.library.likedTracks, discoveries: store.discoveries, preferences: store.preferences.musicTaste, context: context) { message in await MainActor.run { if generation == token && accountID == store.accountGeneration { progress = message } } }
+                try Task.checkCancellation(); guard token == generation, accountID == store.accountGeneration else { return }; result.createdAt = .now; result.originalPrompt = request; arrangement = result; saved = false; saveMessage = nil; createdPlaylist = nil; createUncertain = false; editingPrompt = false; store.saveArrangement(result, for: accountID); store.recordAIGeneration()
             } catch is CancellationError { } catch { if token == generation && accountID == store.accountGeneration { self.error = error.localizedDescription } }
             if token == generation { progress = nil }
         }

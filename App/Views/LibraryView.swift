@@ -28,6 +28,10 @@ struct LibraryView: View {
                 if !store.isLoggedIn && !store.previewMode {
                     Button { store.showLogin = true } label: { HStack { Image(systemName: "person.crop.circle"); Text("连接网易云，带上你的收藏"); Spacer(); Image(systemName: "arrow.up.right") }.font(.subheadline).padding(16).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain)
                 }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 24) { collectionLinks }
+                    VStack(alignment: .leading, spacing: 4) { collectionLinks }
+                }.font(.subheadline).foregroundStyle(Palette.secondary).padding(.bottom, 4)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(LibrarySection.allCases.filter { $0 != .downloads || !store.downloads.records.isEmpty }) { item in Button { section = item } label: { Text(item.rawValue).font(.body.weight(section == item ? .semibold : .regular)).padding(.horizontal, 10).frame(minHeight: 44).foregroundStyle(section == item ? Palette.text : Palette.secondary).overlay(alignment: .bottom) { if section == item { Capsule().fill(Palette.accent).frame(height: 2) } } }.buttonStyle(.plain) }
@@ -60,6 +64,10 @@ struct LibraryView: View {
         .onChange(of: store.accountGeneration) { _, _ in filters = [:]; anchors = [:]; section = .favorites }
         .sheet(isPresented: $newPlaylist) { PlaylistCreationView() }
 
+    }
+    @ViewBuilder private var collectionLinks: some View {
+        NavigationLink { RecentListeningView() } label: { Label("最近听过", systemImage: "clock").fixedSize(horizontal: true, vertical: false).frame(minHeight: 44) }.accessibilityIdentifier("recentListening")
+        NavigationLink { ArrangementLibraryView() } label: { Label("我的编排", systemImage: "rectangle.stack").fixedSize(horizontal: true, vertical: false).frame(minHeight: 44) }.accessibilityIdentifier("arrangementLibrary")
     }
     @ViewBuilder private var content: some View {
         switch section {

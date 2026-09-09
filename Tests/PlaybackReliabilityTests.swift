@@ -104,3 +104,23 @@ extension PlaybackReliabilityTests {
         p.endAudition(); XCTAssertEqual(p.current?.id, 1)
     }
 }
+
+extension PlaybackReliabilityTests {
+    func testPlayNowPreservesQueueAndUndoRestoresPosition() async {
+        let p = controller(); defer { p.clear() }
+        var original = QueueState(); original.replace([track(1), track(2), track(3)], origin: .album)
+        original.shuffle = true; original.repeatMode = .one; original.position = 4
+        p.restore(original)
+        XCTAssertTrue(p.playNow(track(9)))
+        XCTAssertEqual(p.current?.id, 9)
+        XCTAssertEqual(p.queue.entries.filter { $0.track.id != 9 }.map(\.id), original.entries.map(\.id))
+        p.pause(); p.undo()
+        XCTAssertEqual(p.current?.id, 1); XCTAssertEqual(p.queue.position, 4)
+        let stable = await wait { p.snapshot.phase == .paused }; XCTAssertTrue(stable)
+        p.restorationPending = true
+        XCTAssertFalse(p.playNow(track(8))); XCTAssertEqual(p.current?.id, 1)
+        p.restorationPending = false; original.currentID = nil; p.restore(original)
+        XCTAssertTrue(p.playNow(track(8))); XCTAssertEqual(p.current?.id, 8)
+        XCTAssertEqual(p.queue.entries.prefix(3).map(\.id), original.entries.map(\.id))
+    }
+}

@@ -10,7 +10,7 @@ struct RootView: View {
         tabs.cabinetBackground()
             .sheet(isPresented: Binding(get: { store.showLogin && !store.showPlayer && !store.showArrangement && !store.showSettings }, set: { store.showLogin = $0 })) { LoginView() }
             .sheet(isPresented: $store.showSettings) { NavigationStack { SettingsView() } }
-            .sheet(isPresented: $store.showArrangement) { ArrangementView(initialPrompt: store.arrangementPrompt) }
+            .sheet(isPresented: $store.showArrangement) { ArrangementView(initialPrompt: store.arrangementPrompt, existingArrangement: store.arrangementToOpen) }
             .fullScreenCover(isPresented: $store.showPlayer) {
                 if reduceMotion { PlayerView() }
                 else { PlayerView().navigationTransition(.zoom(sourceID: "nowPlaying", in: playerSpace)) }
@@ -24,7 +24,7 @@ struct RootView: View {
                 }
             }
             .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in store.preheater.stop() }.onEnded { _ in store.schedulePreheat() })
-            .onChange(of: store.showArrangement) { _, shown in if shown { store.preheater.stop() } else { store.schedulePreheat() } }
+            .onChange(of: store.showArrangement) { _, shown in if shown { store.preheater.stop() } else { store.arrangementToOpen = nil; store.schedulePreheat() } }
             .onChange(of: store.selectedTab) { _, _ in store.schedulePreheat() }
             .task {
                 if ProcessInfo.processInfo.arguments.contains("--player") { store.showPlayer = true }

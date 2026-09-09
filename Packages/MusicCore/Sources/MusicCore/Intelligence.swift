@@ -27,6 +27,9 @@ public struct Arrangement: Identifiable, Codable, Sendable {
     public var savedPlaylist: Playlist? = nil
     public var saveConfirmed: Bool? = nil
     public var creationUncertain: Bool? = nil
+    public var createdAt: Date? = nil
+    public var isKept: Bool? = nil
+    public var originalPrompt: String? = nil
     public var displayedTracks: [Track] { previewEntries?.map(\.track) ?? tracks }
     public var remainingDuration: Double { expectedDuration ?? duration }
     public var duration: Double { tracks.reduce(0) { $0 + $1.duration } }

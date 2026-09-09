@@ -19,17 +19,28 @@ extension AppStore {
         if args.contains("--ai-result") {
             let tracks = library.likedTracks.map { track in var track = track; track.availability = .full; return track }
             if var result = try? ArrangementValidator.build(.init(title: "留一点时间，慢慢走", explanation: "从熟悉的旋律开始，留出一段不赶时间的路。", trackIDs: tracks.map(\.id)), candidates: tracks, likedIDs: Set(tracks.map(\.id)), intent: .init(durationMinutes: 30, allowDiscovery: false, constraints: "重听收藏，三十分钟")) { if args.contains("--saved-ai-result") { result.savedPlaylist = .init(id: 9, name: result.title); result.saveConfirmed = true }; recentArrangements = [result] }
-            showArrangement = true
+            arrangementToOpen = recentArrangements.first; showArrangement = true
+        }
+        if args.contains("--collection-test") {
+            let tracks = library.likedTracks.map { track in var track = track; track.availability = .full; return track }
+            history.recent = tracks
+            for (index, track) in tracks.enumerated() { history.lastPlayed[track.id] = Calendar.current.startOfDay(for: .now).addingTimeInterval(index < 3 ? 3600 : index < 6 ? -3600 : -7 * 86400) }
+            recentArrangements = ["夜晚，慢慢走", "安静的午后", "熟悉的旋律"].enumerated().compactMap { index, title in
+                guard var result = try? ArrangementValidator.build(.init(title: title, explanation: "从熟悉的旋律开始，留一段不赶时间的音乐。", trackIDs: tracks.map(\.id)), candidates: tracks, likedIDs: Set(tracks.map(\.id)), intent: .init(durationMinutes: 30, allowDiscovery: false, constraints: index == 1 ? "午后休息，重听熟悉的音乐" : "收藏里的歌，陪我散步三十分钟")) else { return nil }
+                result.createdAt = Date().addingTimeInterval(Double(-index * 86400)); result.originalPrompt = result.intent.constraints; result.isKept = index == 1
+                return result
+            }
+            try? persistence.save(recentArrangements, key: accountKey("ai.arrangements"))
         }
         guard args.contains("--audio-test") else { return }
         do {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("yuyin-ui-test.wav")
             let format = AVAudioFormat(standardFormatWithSampleRate: 8000, channels: 1)!
-            let frames: AVAudioFrameCount = args.contains("--ai-result") ? 80000 : 24000
+            let frames: AVAudioFrameCount = args.contains("--collection-test") ? 240000 : args.contains("--ai-result") ? 80000 : 24000
             let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
             buffer.frameLength = frames; memset(buffer.floatChannelData![0], 0, Int(frames) * MemoryLayout<Float>.size)
             let file = try AVAudioFile(forWriting: url, settings: format.settings); try file.write(from: buffer)
-            let tracks = (1...2).map { Track(id: Int64($0), title: "测试音频 \($0)", artists: [.init(id: 0, name: "本地无声测试")], album: .init(id: 0, name: "播放回归"), duration: 3, availability: .full) }
+            let tracks = (1...2).map { Track(id: Int64($0), title: "测试音频 \($0)", artists: [.init(id: 0, name: "本地无声测试")], album: .init(id: 0, name: "播放回归"), duration: args.contains("--collection-test") ? 30 : 3, availability: .full) }
             player.offlineURL = { _ in url }
             var queue = QueueState(); queue.replace(tracks, origin: .album); player.restore(queue)
             if args.contains("--audio-paused") { player.play(tracks); player.pause() }

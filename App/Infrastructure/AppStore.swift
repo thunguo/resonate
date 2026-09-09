@@ -16,6 +16,11 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     let preheater = SmartPreheater()
     private(set) var likedIDs = Set<Int64>()
     private(set) var rediscoveries: [Track] = []
+    private(set) var canRefreshRediscoveries = false
+    private(set) var isRefreshingRediscoveries = false
+    @ObservationIgnored private var rediscoveryTask: Task<Void, Never>?
+    @ObservationIgnored private var rediscoveryGeneration = UUID()
+    @ObservationIgnored private var hasRediscoveryBatch = false
     private(set) var libraryRevision = 0
     private(set) var cacheBytes = 0
     var sessionExpired = false
@@ -32,6 +37,8 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     var discoveries: [Track] = []
     var preferences = UserPreferences()
     var history = ListeningHistory()
+    private(set) var isRestoringHistory = true
+    @ObservationIgnored private var pendingHistoryPlays: [(Track, Date)] = []
     var configurations: [AIProviderConfig] = []
     var arrangementProviderID: UUID?
     var explanationProviderID: UUID?
@@ -50,6 +57,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     var showSettings = false
     var showArrangement = false
     var arrangementPrompt = ""
+    var arrangementToOpen: Arrangement?
     var selectedTab = 0
     var notice: AppNotice?
     var searchHistory: [String] = []
@@ -158,7 +166,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     }
     func logout() async {
         basicPreheatTask?.cancel()
-        accountGeneration = UUID(); hydrationTask?.cancel(); indexingTask?.cancel(); preheater.stop(); player.clear(); downloads.clearAccount()
+        accountGeneration = UUID(); hydrationTask?.cancel(); indexingTask?.cancel(); rediscoveryTask?.cancel(); preheater.stop(); player.clear(); downloads.clearAccount()
         let old = profile?.id ?? 0
         await persistTask?.value
         Task { await ArtworkStore.shared.clear() }
@@ -173,13 +181,18 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     func accountKey(_ suffix: String) -> String { "account.\(profile?.id ?? 0).\(suffix)" }
     private func loadAccount() {
         isSyncing = false; isLoading = false; restoringAccount = true; pendingURL = nil
+        arrangementToOpen = nil
         let home = persistence.load(HomeSnapshot.self, key: accountKey("home"))
+        let batch = persistence.load([Track].self, key: accountKey("rediscovery"))
+        rediscoveries = batch ?? []; hasRediscoveryBatch = batch?.isEmpty == false
+        canRefreshRediscoveries = false; isRefreshingRediscoveries = false
         library = .init(accountID: profile?.id ?? 0, likedTracks: home?.tracks ?? [], syncedAt: .distantPast)
         discoveries = home?.discoveries ?? []
         lastProfileCheck = persistence.load(Date.self, key: accountKey("profileCheckedAt")) ?? .distantPast
         lastLibraryCheck = .distantPast; lastDiscoveryCheck = .distantPast; queueWasChanged = false
         preferences = persistence.load(UserPreferences.self, key: accountKey("preferences")) ?? .init()
-        history = .init()
+        history = persistence.load(ListeningHistory.self, key: accountKey("history.recent")) ?? .init()
+        isRestoringHistory = true; pendingHistoryPlays = []
         pendingMutations = persistence.load([PendingMutation].self, key: accountKey("pending")) ?? []
         for index in pendingMutations.indices where pendingMutations[index].status == "正在同步" {
             pendingMutations[index].status = "上次同步中断，点击重试"
@@ -221,8 +234,29 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     func savePreferences() { player.quality = preferences.quality; downloads.wifiOnly = preferences.wifiOnly; persist(preferences, key: accountKey("preferences")); updateWidget(force: true) }
     @discardableResult func saveArrangement(_ value: Arrangement, for generation: UUID) -> Bool {
         guard generation == accountGeneration else { return false }
-        recentArrangements.removeAll { $0.id == value.id }; recentArrangements.insert(value, at: 0)
-        recentArrangements = Array(recentArrangements.prefix(10)); persist(recentArrangements, key: accountKey("ai.arrangements")); return true
+        return commitArrangements(ArrangementArchive.upserting(value, into: recentArrangements))
+    }
+    @discardableResult private func commitArrangements(_ values: [Arrangement]) -> Bool {
+        do {
+            try persistence.save(values, key: accountKey("ai.arrangements"))
+            recentArrangements = values; return true
+        } catch { persistence.context.rollback(); notify("编排未能保存到本机，已有内容已保留。请检查存储空间后重试。"); return false }
+    }
+    @discardableResult func keepArrangement(_ id: UUID, kept: Bool) -> Bool {
+        guard let index = recentArrangements.firstIndex(where: { $0.id == id }) else { return false }
+        var values = recentArrangements
+        var item = values.remove(at: index); item.isKept = kept
+        values.insert(item, at: 0)
+        return commitArrangements(ArrangementArchive.retaining(values))
+    }
+    @discardableResult func renameArrangement(_ id: UUID, title: String) -> Bool {
+        let title = String(title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
+        guard !title.isEmpty, let index = recentArrangements.firstIndex(where: { $0.id == id }) else { return false }
+        var values = recentArrangements; values[index].title = title
+        return commitArrangements(values)
+    }
+    @discardableResult func removeArrangement(_ id: UUID) -> Bool {
+        commitArrangements(recentArrangements.filter { $0.id != id })
     }
     func explanationRecord(_ id: Int64) -> ExplanationRecord? { persistence.load(ExplanationRecord.self, key: accountKey("ai.explanation.\(id)")) }
     func saveExplanation(_ value: ExplanationRecord) { persist(value, key: accountKey("ai.explanation.\(value.trackID)")) }
@@ -230,7 +264,35 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         do { try persistence.remove(prefix: accountKey("ai.")); recentArrangements = []; notify("已清除本机编排和导读") } catch { report(error) }
     }
     func recordSearch(_ query: String) { searchHistory.removeAll { $0 == query }; searchHistory.insert(query, at: 0); searchHistory = Array(searchHistory.prefix(12)); persist(searchHistory, key: accountKey("searchHistory")) }
-    func clearHistory() { history = .init(); searchHistory = []; rebuildLibraryIndex(); persist(history, key: accountKey("history")); persist(searchHistory, key: accountKey("searchHistory")) }
+    func clearHistory() {
+        guard clearListeningHistory() else { return }
+        searchHistory = []; persist(searchHistory, key: accountKey("searchHistory"))
+    }
+    @discardableResult func clearListeningHistory() -> Bool {
+        guard !isRestoringHistory else { notify("聆听记录正在恢复，请稍后重试。"); return false }
+        return commitHistory(.init())
+    }
+    @discardableResult func removeHistoryTrack(_ id: Int64) -> Bool {
+        guard !isRestoringHistory else { notify("聆听记录正在恢复，请稍后重试。"); return false }
+        var updated = history
+        updated.recent.removeAll { $0.id == id }; updated.lastPlayed.removeValue(forKey: id)
+        return commitHistory(updated)
+    }
+    @discardableResult private func commitHistory(_ value: ListeningHistory) -> Bool {
+        do {
+            try persistence.save(value, key: accountKey("history"))
+            history = value
+            saveHistorySummary()
+            for index in rediscoveries.indices {
+                rediscoveries[index].reason = RediscoverySelection.reason(lastPlayed: history.lastPlayed[rediscoveries[index].id])
+            }
+            updateWidget(force: true); return true
+        } catch { persistence.context.rollback(); notify("聆听记录未能保存，已有记录已保留。请检查存储空间后重试。"); return false }
+    }
+    private func saveHistorySummary() {
+        let ids = Set(history.recent.map(\.id))
+        saveInBackground(ListeningHistory(lastPlayed: Dictionary(uniqueKeysWithValues: ids.compactMap { id in history.lastPlayed[id].map { (id, $0) } }), recent: history.recent), key: accountKey("history.recent"))
+    }
     func pinPlaylist(_ id: Int64) { if preferences.pinnedPlaylists.contains(id) { preferences.pinnedPlaylists.remove(id) } else { preferences.pinnedPlaylists.insert(id) }; savePreferences() }
     func requireLogin() -> Bool { if !isLoggedIn { showLogin = true; return false }; return true }
     func toggleLike(_ track: Track) async {
@@ -367,8 +429,12 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         }
     }
     private func recordPlayed(_ track: Track) {
-        history.lastPlayed[track.id] = .now; history.recent.removeAll { $0.id == track.id }; history.recent.insert(track, at: 0); history.recent = Array(history.recent.prefix(100))
-        persist(history, key: accountKey("history")); rebuildLibraryIndex(); saveHomeSnapshot(); updateWidget(force: true)
+        let now = Date()
+        if isRestoringHistory { pendingHistoryPlays.append((track, now)) }
+        var updated = history
+        updated.lastPlayed[track.id] = now; updated.recent.removeAll { $0.id == track.id }; updated.recent.insert(track, at: 0); updated.recent = Array(updated.recent.prefix(100))
+        if isRestoringHistory { history = updated } else { _ = commitHistory(updated) }
+        saveHomeSnapshot()
     }
     func updateWidget(force: Bool = false) {
         if force { NotificationCenter.default.post(name: Notification.Name("YuyinLibraryDidChange"), object: nil) }
@@ -384,12 +450,21 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         let generation = accountGeneration, prefix = accountKey("")
         defer {
             if generation == accountGeneration {
-                restoringAccount = false; player.finishRestoration(nil)
+                restoringAccount = false; player.finishRestoration(nil); updateRediscoveries()
                 if let url = pendingURL { pendingURL = nil; handleURL(url) }
             }
         }
         do {
-            if let saved = try await background.load(ListeningHistory.self, key: prefix + "history"), generation == accountGeneration { history = saved }
+            var restoredHistory = try await background.load(ListeningHistory.self, key: prefix + "history") ?? .init()
+            guard generation == accountGeneration else { return }
+            let hadPendingPlays = !pendingHistoryPlays.isEmpty
+            for (track, date) in pendingHistoryPlays {
+                restoredHistory.lastPlayed[track.id] = date
+                restoredHistory.recent.removeAll { $0.id == track.id }; restoredHistory.recent.insert(track, at: 0)
+            }
+            restoredHistory.recent = Array(restoredHistory.recent.prefix(100))
+            pendingHistoryPlays = []; isRestoringHistory = false; history = restoredHistory
+            if hadPendingPlays { _ = commitHistory(restoredHistory) } else { saveHistorySummary() }
             if let queue = try await background.load(QueueState.self, key: prefix + "queue"), generation == accountGeneration, !queueWasChanged {
                 var restored = queue
                 if let checkpoint = try await background.load(PlaybackCheckpoint.self, key: prefix + "checkpoint"), checkpoint.currentID == queue.currentID { restored.position = checkpoint.position }
@@ -403,7 +478,15 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
                 discoveries = cached.value; lastDiscoveryCheck = cached.updatedAt
             } else if let legacy = try await background.load([Track].self, key: prefix + "discoveries"), generation == accountGeneration { discoveries = legacy }
             guard generation == accountGeneration else { return }; saveHomeSnapshot()
-        } catch { if generation == accountGeneration { notify("部分本机资料暂时无法读取，原数据已保留。") } }
+        } catch {
+            if generation == accountGeneration {
+                if isRestoringHistory {
+                    _ = persistence.load(ListeningHistory.self, key: prefix + "history")
+                    isRestoringHistory = false; pendingHistoryPlays = []
+                }
+                notify("部分本机资料暂时无法读取，原数据已保留。")
+            }
+        }
     }
     private func rebuildLikedIDs() {
         var ids = Set(library.likedTracks.map(\.id))
@@ -414,13 +497,40 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     }
     private func rebuildLibraryIndex() {
         rebuildLikedIDs(); libraryRevision += 1; indexingTask?.cancel()
-        let tracks = library.likedTracks, recent = history.lastPlayed, generation = accountGeneration, revision = libraryRevision
-        indexingTask = Task { [weak self, musicIndex] in
+        let tracks = library.likedTracks, revision = libraryRevision
+        indexingTask = Task { [musicIndex] in
             guard !Task.isCancelled else { return }
             await musicIndex.replace(tracks, revision: revision)
-            let ordered = await Task.detached(priority: .utility) { tracks.sorted { (recent[$0.id] ?? .distantPast) < (recent[$1.id] ?? .distantPast) } }.value
-            guard !Task.isCancelled, let self, self.accountGeneration == generation else { return }
-            self.rediscoveries = ordered
+        }
+        updateRediscoveries()
+    }
+    func refreshRediscoverySelection() { updateRediscoveries(replacing: true) }
+    private func updateRediscoveries(replacing: Bool = false) {
+        guard !restoringAccount || previewMode else { return }
+        rediscoveryTask?.cancel()
+        let token = UUID(), account = accountGeneration
+        rediscoveryGeneration = token; isRefreshingRediscoveries = true
+        let tracks = library.likedTracks, dates = history.lastPlayed
+        let existing = hasRediscoveryBatch ? rediscoveries : []
+        rediscoveryTask = Task { [weak self] in
+            let result = await Task.detached(priority: .utility) {
+                let candidates = tracks.filter { $0.availability != .unavailable && $0.availability != .preview && $0.metadataPending != true }
+                let byID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                var selected = replacing ? [] : existing.compactMap { byID[$0.id] }
+                if selected.count < min(12, candidates.count) {
+                    let avoiding = Set((replacing ? existing : selected).map(\.id))
+                    let additions = RediscoverySelection.make(library: candidates, lastPlayed: dates, avoiding: avoiding)
+                    let retained = Set(selected.map(\.id))
+                    selected += additions.filter { !retained.contains($0.id) }.prefix(12 - selected.count)
+                }
+                return (Array(selected.prefix(12)).map { track in
+                    var track = track; track.reason = RediscoverySelection.reason(lastPlayed: dates[track.id]); return track
+                }, byID.count > 12)
+            }.value
+            guard !Task.isCancelled, let self, account == accountGeneration, token == rediscoveryGeneration else { return }
+            rediscoveries = result.0.map { track in var track = track; track.reason = RediscoverySelection.reason(lastPlayed: self.history.lastPlayed[track.id]); return track }; canRefreshRediscoveries = result.1; isRefreshingRediscoveries = false
+            hasRediscoveryBatch = !result.0.isEmpty
+            saveInBackground(result.0, key: accountKey("rediscovery"))
         }
     }
     func saveInBackground<Value: Codable & Sendable>(_ value: Value, key: String) {
@@ -474,6 +584,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
             if arguments.contains("--home-syncing") { library.likedTracks = []; isSyncing = true }
             if arguments.contains("--home-sync-failed") { library.likedTracks = []; syncError = "测试同步失败" }
         }
+        isRestoringHistory = false
         loadAdditionalPreviewFixtures()
         #endif
     }
