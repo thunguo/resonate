@@ -236,6 +236,14 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         guard generation == accountGeneration else { return false }
         return commitArrangements(ArrangementArchive.upserting(value, into: recentArrangements))
     }
+    @discardableResult func saveRevision(_ value: Arrangement, from original: Arrangement, for generation: UUID) -> Bool {
+        guard generation == accountGeneration, value.id != original.id else { return false }
+        let source = recentArrangements.first { $0.id == original.id } ?? original
+        guard source.displayedTracks == original.displayedTracks, source.feedback == original.feedback else { return false }
+        var revised = value; revised.title = source.title
+        let values = [revised, source] + recentArrangements.filter { $0.id != source.id && $0.id != revised.id }
+        return commitArrangements(ArrangementArchive.retaining(values))
+    }
     @discardableResult private func commitArrangements(_ values: [Arrangement]) -> Bool {
         do {
             try persistence.save(values, key: accountKey("ai.arrangements"))
@@ -410,6 +418,9 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         if let explanationProviderID { persist(explanationProviderID, key: "ai.explanation") } else { try? persistence.remove(prefix: "ai.explanation") }
     }
     func provider(explanation: Bool = false) throws -> AIProvider {
+        #if DEBUG
+        if previewMode && ProcessInfo.processInfo.arguments.contains("--editing-test") { return AIProvider(config: .init(kind: .custom, baseURL: "https://example.com", model: "fixture"), secrets: .init(apiKey: "fixture"), transport: ArrangementPreviewTransport()) }
+        #endif
         let id = explanation ? explanationProviderID ?? arrangementProviderID : arrangementProviderID
         guard let config = configurations.first(where: { $0.id == id }), config.consentDate != nil,
               let data = Keychain.read(config.secretID), let secrets = try? JSONDecoder().decode(AISecrets.self, from: data) else { throw MusicError.message("请先在设置中连接一个模型服务。") }

@@ -146,6 +146,9 @@ struct TrackRow: View {
     var removeFromHistory: (() -> Void)? = nil
     var play: (() -> Void)? = nil
     var audition = false
+    var adjustTrack: (() -> Void)? = nil
+    var trackFeedback: (() -> Void)? = nil
+    @State private var alongTrack = false
     @State private var addToPlaylist = false
     var body: some View {
         HStack(spacing: 12) {
@@ -161,6 +164,9 @@ struct TrackRow: View {
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("\(audition ? "试听" : "播放") \(track.title)，\(track.artistName)")
             Menu {
+                Button("沿着这首听", systemImage: "point.topleft.down.to.point.bottomright.curvepath") { alongTrack = true }
+                if let adjustTrack { Button("只替换这首", systemImage: "arrow.triangle.2.circlepath", action: adjustTrack) }
+                if let trackFeedback { Button("这首不太合适", systemImage: "slider.horizontal.3", action: trackFeedback) }
                 if let continuePlaying { Button("从这里继续听", systemImage: "play.fill", action: continuePlaying) }
                 Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") { store.player.enqueue([track], next: true); store.notify("已设为下一首") }
                 Button("加入队列", systemImage: "text.append") { store.player.enqueue([track]); store.notify("已加入队列") }
@@ -171,6 +177,7 @@ struct TrackRow: View {
                 if let removeFromHistory { Button("移除这条聆听记录", systemImage: "clock.badge.xmark", role: .destructive, action: removeFromHistory) }
             } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).foregroundStyle(Palette.secondary) }.accessibilityLabel("\(track.title)的更多操作")
         }.padding(.vertical, 7)
+        .sheet(isPresented: $alongTrack) { ArrangementView(initialPrompt: "以这首为起点，延续熟悉的感觉，穿插少量新歌，三十分钟", seedTrack: track) }
         .sheet(isPresented: $addToPlaylist) { PlaylistPicker(tracks: [track]) }
     }
 }

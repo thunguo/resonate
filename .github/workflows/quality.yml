@@ -27,7 +27,7 @@ jobs:
           set -o pipefail
           mkdir -p build
           swift test --package-path Packages/MusicCore 2>&1 | tee build/core-tests.log
-          python3 Scripts/check-test-results.py swift build/core-tests.log --minimum 70
+          python3 Scripts/check-test-results.py swift build/core-tests.log --minimum 82
   ios:
     runs-on: macos-26
     timeout-minutes: 35
@@ -52,7 +52,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$YY_SIMULATOR_ID" \
             -derivedDataPath build/DerivedData -resultBundlePath build/Native.xcresult \
             -parallel-testing-enabled NO -only-testing:YuyinTests CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/native-tests.log
-          python3 Scripts/check-test-results.py xcode build/Native.xcresult --minimum 36
+          python3 Scripts/check-test-results.py xcode build/Native.xcresult --minimum 39
       - name: Interface regression
         shell: bash
         run: |
@@ -61,7 +61,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$YY_SIMULATOR_ID" \
             -derivedDataPath build/DerivedData -resultBundlePath build/Interface.xcresult \
             -parallel-testing-enabled NO -only-testing:YuyinUITests CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/interface-tests.log
-          python3 Scripts/check-test-results.py xcode build/Interface.xcresult --minimum 20
+          python3 Scripts/check-test-results.py xcode build/Interface.xcresult --minimum 25
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

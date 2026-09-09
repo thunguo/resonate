@@ -15,6 +15,7 @@ struct PlayerView: View {
     @State private var showQueue = false
     @State private var queueAnchor: UUID?
     @State private var showExplanation = false
+    @State private var alongTrack: Track?
     @State private var downloadMessage: String?
     var body: some View {
         NavigationStack {
@@ -60,8 +61,9 @@ struct PlayerView: View {
             }.cabinetBackground().toolbar(.hidden, for: .navigationBar)
                 .sheet(isPresented: $showLyrics) { LyricsView(reading: $lyricsPosition) }
                 .sheet(isPresented: $showQueue) { QueueView(anchor: $queueAnchor) }
+                .sheet(item: $alongTrack) { track in ArrangementView(initialPrompt: "以这首为起点，延续熟悉的感觉，穿插少量新歌，三十分钟", seedTrack: track) }
                 .sheet(isPresented: $showExplanation) { if let track = store.player.current { ExplanationView(track: track) } }
-                .sheet(isPresented: Binding(get: { store.showLogin && !showLyrics && !showQueue && !showExplanation }, set: { store.showLogin = $0 })) { LoginView() }
+                .sheet(isPresented: Binding(get: { store.showLogin && !showLyrics && !showQueue && !showExplanation && alongTrack == nil }, set: { store.showLogin = $0 })) { LoginView() }
         }
     }
     private func artworkSize(_ geometry: GeometryProxy) -> CGFloat {
@@ -88,6 +90,7 @@ struct PlayerView: View {
     }
     private func moreMenu(_ track: Track) -> some View {
         Menu {
+            Button("沿着这首听", systemImage: "point.topleft.down.to.point.bottomright.curvepath") { alongTrack = track }
             Menu("播放音质") { ForEach(AudioQuality.allCases, id: \.self) { quality in Button(quality.label) { store.preferences.quality = quality; store.savePreferences() } } }
             if store.downloads.isAuthorized { Button("下载歌曲", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); downloadMessage = "已加入下载队列" } catch { downloadMessage = error.localizedDescription } } }
             Menu("定时停止") { ForEach([15, 30, 45, 60], id: \.self) { minutes in Button("\(minutes) 分钟后") { store.player.setSleepTimer(minutes: minutes) } }; Button("关闭定时停止") { store.player.setSleepTimer(minutes: nil) } }

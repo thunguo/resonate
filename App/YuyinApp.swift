@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         let cookie = preview ? "" : Keychain.read("netease.cookie").flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let music: MusicService
         #if DEBUG
-        music = ProcessInfo.processInfo.arguments.contains("--search-test") ? MusicService(transport: SearchPreviewTransport()) : MusicService(cookie: cookie)
+        music = preview && ProcessInfo.processInfo.arguments.contains("--editing-test") ? MusicService(transport: ArrangementPreviewTransport()) : ProcessInfo.processInfo.arguments.contains("--search-test") ? MusicService(transport: SearchPreviewTransport()) : MusicService(cookie: cookie)
         #else
         music = MusicService(cookie: cookie)
         #endif

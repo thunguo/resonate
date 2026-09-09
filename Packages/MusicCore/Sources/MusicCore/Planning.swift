@@ -4,8 +4,10 @@ public struct ArrangementContext: Sendable {
     public var previous: Arrangement?
     public var queue: QueueState?
     public var excludedIDs: Set<Int64>
-    public init(previous: Arrangement? = nil, queue: QueueState? = nil, excludedIDs: Set<Int64> = []) {
-        self.previous = previous; self.queue = queue; self.excludedIDs = excludedIDs
+    public var seedTrack: Track?
+    public var feedback: [ArrangementFeedback]
+    public init(previous: Arrangement? = nil, queue: QueueState? = nil, excludedIDs: Set<Int64> = [], seedTrack: Track? = nil, feedback: [ArrangementFeedback] = []) {
+        self.previous = previous; self.queue = queue; self.excludedIDs = excludedIDs.union(feedback.map(\.trackID)); self.seedTrack = seedTrack; self.feedback = feedback
     }
     public var retained: [QueueEntry] {
         guard let queue else { return [] }
@@ -17,7 +19,7 @@ public struct ArrangementContext: Sendable {
 }
 
 public enum CollectionRetrieval {
-    public static func candidates(library: [Track], request: String, queries: [String], previous: [Track] = [], excluded: Set<Int64> = [], limit: Int = 80) -> [Track] {
+    public static func candidates(library: [Track], request: String, queries: [String], previous: [Track] = [], excluded: Set<Int64> = [], limit: Int = 80, seed: Track? = nil) -> [Track] {
         let request = request.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         let terms = queries.map { $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) }.filter { !$0.isEmpty }
         let previousIDs = Set(previous.map(\.id))
@@ -26,6 +28,7 @@ public enum CollectionRetrieval {
             let (index, track) = pair
             let title = track.title.lowercased(), album = track.album.name.lowercased(), artist = track.artistName.lowercased()
             var score = previousIDs.contains(track.id) ? 20 : 0
+            score += CandidateContext.related(track, to: seed, similarIDs: []).count * 90
             if title.count >= 2 && request.contains(title) { score += 120 }
             for person in track.artists where person.name.count >= 2 && request.contains(person.name.lowercased()) { score += 100 }
             if album.count >= 2 && request.contains(album) { score += 70 }

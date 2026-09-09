@@ -315,3 +315,97 @@ extension YuyinUITests {
         XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 5), .completed, app.debugDescription)
     }
 }
+
+extension YuyinUITests {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<18 {
+            let footer = app.buttons["findReplacements"]
+            let navigationBottom = app.navigationBars.allElementsBoundByIndex.filter { $0.isHittable }.last?.frame.maxY ?? 90
+            let top = max(app.frame.minY + 90, navigationBottom + 8)
+            let bottom = footer.exists && element.identifier != "findReplacements" ? min(app.frame.maxY - 20, footer.frame.minY - 10) : app.frame.maxY - 20
+            let frame = element.frame
+            if element.isHittable && (element.identifier == "findReplacements" || (frame.midY > top && frame.midY < bottom)) { return }
+            let middle = (top + bottom) / 2
+            let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: middle))
+            let end = start.withOffset(CGVector(dx: 0, dy: frame.midY <= top ? 110 : -110))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTFail("未能将操作滚动到导航与底部操作条之间")
+    }
+    private func chooseFirstReplacement(in app: XCUIApplication) {
+        let menu = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "的更多操作")).firstMatch
+        reveal(menu, in: app); menu.tap()
+        app.buttons["只替换这首"].tap()
+        reveal(app.buttons["findReplacements"], in: app)
+    }
+    func testAlongSongOpensWithoutChangingPlaybackAndGeneratesAnchoredResult() {
+        let app = launch(["--editing-test", "--player"])
+        XCTAssertTrue(app.buttons["播放器更多操作"].waitForExistence(timeout: 10))
+        let originalTitle = app.staticTexts["playerTrackTitle"].label
+        app.buttons["播放器更多操作"].tap(); app.buttons["沿着这首听"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["arrangementPrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[originalTitle].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "沿着这首听"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["编排一段音乐"].tap()
+        XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 15))
+        reveal(app.buttons["选择要替换的歌曲"], in: app)
+        app.buttons["选择要替换的歌曲"].tap()
+        let anchor = app.buttons["选择替换 " + originalTitle]
+        reveal(anchor, in: app); XCTAssertFalse(anchor.isEnabled)
+        app.buttons["完成"].tap()
+        XCTAssertEqual(app.staticTexts["playerTrackTitle"].label, originalTitle)
+    }
+    func testRevisionPreviewDiscardAndAdoptionPreservePlayback() {
+        let app = launch(["--ai-result", "--saved-ai-result", "--editing-test"])
+        XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 10))
+        chooseFirstReplacement(in: app); app.buttons["findReplacements"].tap()
+        XCTAssertTrue(app.buttons["adoptRevision"].waitForExistence(timeout: 15))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "局部替换预览"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["放弃"].tap()
+        XCTAssertTrue(app.buttons["已保存到网易云"].exists)
+        reveal(app.buttons["findReplacements"], in: app); app.buttons["findReplacements"].tap()
+        XCTAssertTrue(app.buttons["adoptRevision"].waitForExistence(timeout: 15)); app.buttons["adoptRevision"].tap()
+        XCTAssertTrue(app.buttons["selectReplacementTracks"].waitForExistence(timeout: 5))
+        reveal(app.buttons["保存为私人歌单"], in: app); XCTAssertTrue(app.buttons["保存为私人歌单"].isEnabled)
+        app.buttons["完成"].tap(); XCTAssertTrue(app.buttons["miniPlayer"].waitForExistence(timeout: 5))
+    }
+    func testFeedbackIsExplicitAndCanBeRemovedWithoutGeneration() {
+        let app = launch(["--ai-result", "--saved-ai-result", "--editing-test", "--dark", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXL"])
+        XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 10))
+        let menu = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "的更多操作")).firstMatch
+        reveal(menu, in: app); menu.tap(); app.buttons["这首不太合适"].tap(); app.buttons["最近听得太多"].tap()
+        let feedback = app.buttons["本次反馈（1）"]; reveal(feedback, in: app); feedback.tap()
+        XCTAssertTrue(app.staticTexts["最近听得太多"].exists)
+        let remove = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "移除反馈 ")).firstMatch
+        reveal(remove, in: app)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "本次反馈-深色大字体"; shot.lifetime = .keepAlways; add(shot)
+        remove.tap()
+        XCTAssertTrue(feedback.waitForNonExistence(timeout: 5)); XCTAssertFalse(app.buttons["adoptRevision"].exists)
+        XCTAssertTrue(app.buttons["已保存到网易云"].exists)
+    }
+    func testReplacementFailureAndCancellationKeepSavedResult() {
+        for flag in ["--editing-failure", "--editing-slow"] {
+            let app = launch(["--ai-result", "--saved-ai-result", "--editing-test", flag])
+            XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 10))
+            chooseFirstReplacement(in: app); app.buttons["findReplacements"].tap()
+            if flag == "--editing-slow" { let cancel = app.buttons["findReplacements"]; XCTAssertTrue(cancel.waitForExistence(timeout: 5)); cancel.tap() }
+            else { XCTAssertTrue(app.staticTexts["请求频率或账户额度达到限制，请查看厂商控制台。"].waitForExistence(timeout: 15)) }
+            XCTAssertFalse(app.buttons["adoptRevision"].exists); XCTAssertTrue(app.buttons["已保存到网易云"].exists)
+            app.terminate()
+        }
+    }
+}
+
+extension YuyinUITests {
+    func testAlongSongFromHistoryCanRequestLoginWithoutLosingResult() {
+        let app = launch(["--editing-test", "--collection-test", "--library"])
+        XCTAssertTrue(app.buttons["recentListening"].waitForExistence(timeout: 10)); app.buttons["recentListening"].tap()
+        let menu = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "的更多操作")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 5)); menu.tap(); app.buttons["沿着这首听"].tap()
+        XCTAssertTrue(app.buttons["编排一段音乐"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "沿着这首听-入口"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["编排一段音乐"].tap(); XCTAssertTrue(app.buttons["keepArrangement"].waitForExistence(timeout: 15))
+        let save = app.buttons["保存为私人歌单"]; reveal(save, in: app); save.tap()
+        XCTAssertTrue(app.textFields["phoneField"].waitForExistence(timeout: 8))
+    }
+}

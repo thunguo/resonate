@@ -75,3 +75,9 @@ extension AppStore {
     }
     var metadataCacheBytes: Int { cacheBytes }
 }
+
+extension AppStore {
+    func similarTracks(_ track: Track) async throws -> [Track] {
+        try await repository.value([Track].self, key: accountKey("cache.similar.\(track.id)"), lifetime: Freshness.metadata) { [music] in try await music.similarTracks(track.id) }
+    }
+}

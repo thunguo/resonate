@@ -21,6 +21,15 @@ extension AppStore {
             if var result = try? ArrangementValidator.build(.init(title: "留一点时间，慢慢走", explanation: "从熟悉的旋律开始，留出一段不赶时间的路。", trackIDs: tracks.map(\.id)), candidates: tracks, likedIDs: Set(tracks.map(\.id)), intent: .init(durationMinutes: 30, allowDiscovery: false, constraints: "重听收藏，三十分钟")) { if args.contains("--saved-ai-result") { result.savedPlaylist = .init(id: 9, name: result.title); result.saveConfirmed = true }; recentArrangements = [result] }
             arrangementToOpen = recentArrangements.first; showArrangement = true
         }
+        if args.contains("--editing-test") {
+            let config = AIProviderConfig(kind: .custom, name: "自定义服务", baseURL: "https://example.com", model: "fixture")
+            configurations = [config]; arrangementProviderID = config.id
+            if var result = recentArrangements.first {
+                result.tracks = Array(result.tracks.prefix(4)); result.notes = nil
+                recentArrangements = [result]; arrangementToOpen = result
+                try? persistence.save(recentArrangements, key: accountKey("ai.arrangements"))
+            }
+        }
         if args.contains("--collection-test") {
             let tracks = library.likedTracks.map { track in var track = track; track.availability = .full; return track }
             history.recent = tracks
@@ -64,6 +73,34 @@ actor SearchPreviewTransport: HTTPTransport {
         }
         let json = JSONValue.object(["code": .number(200), "result": .object([kind == 10 ? "albums" : "songs": .array(entries), kind == 10 ? "albumCount" : "songCount": .number(60)])])
         return (try JSONEncoder().encode(json), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+#endif
+
+#if DEBUG
+actor ArrangementPreviewTransport: HTTPTransport {
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let json = try JSONDecoder().decode(JSONValue.self, from: request.httpBody ?? Data("{}".utf8))
+        var payload: JSONValue = .object(["code": .number(200)])
+        var status = 200
+        if request.url?.path.contains("song/url") == true {
+            payload = .object(["code": .number(200), "data": .array(json["id"].string.split(separator: ",").map { .object(["id": .number(Double($0) ?? 0), "url": .string("https://example.com/audio.mp3"), "code": .number(200)]) })])
+        } else if request.url?.path.contains("chat/completions") == true {
+            let args = ProcessInfo.processInfo.arguments
+            try await Task.sleep(for: .milliseconds(args.contains("--editing-slow") ? 10000 : 350))
+            if args.contains("--editing-failure") { status = 429 }
+            let system = json["messages"].array.first?["content"].string ?? ""
+            let text = json["messages"].array.last?["content"].string ?? ""
+            let candidates = text.components(separatedBy: "候选：").last?.data(using: .utf8).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }?.array ?? []
+            let content: JSONValue
+            if system.contains("解析器") { content = .object(["durationMinutes": .number(30), "allowDiscovery": .bool(true), "discoveryFraction": .number(0.2), "queries": .array([]), "constraints": .string("沿着这首听，三十分钟")]) }
+            else if system.contains("编排编辑") {
+                let slots = text.components(separatedBy: "所选：").last?.components(separatedBy: "\n候选：").first?.data(using: .utf8).flatMap { try? JSONDecoder().decode(JSONValue.self, from: $0) }?.array ?? []
+                content = .object(["replacements": .array(zip(slots, candidates).map { .object(["originalID": .number(Double($0["id"].string) ?? 0), "replacementID": .number(Double($1["id"].string) ?? 0)]) })])
+            } else { content = .object(["title": .string("沿着熟悉的旋律"), "explanation": .string("从收藏与歌曲之间已有的关联继续探索。"), "trackIDs": .array(candidates.map { .number(Double($0["id"].string) ?? 0) })]) }
+            payload = .object(["choices": .array([.object(["message": .object(["content": .string(String(decoding: try JSONEncoder().encode(content), as: UTF8.self))]), "finish_reason": .string("stop")])])])
+        }
+        return (try JSONEncoder().encode(payload), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }
 #endif
