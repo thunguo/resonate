@@ -109,8 +109,8 @@ private struct PreheatTransport: HTTPTransport {
                 for playlist in playlists.prefix(20) {
                     try Task.checkCancellation(); guard self.canExpand else { return }
                     if let cached = try await repository.cached([Track].self, key: prefix + "playlist.\(playlist.id)"), Date().timeIntervalSince(cached.updatedAt) < Freshness.collection { continue }
-                    let songs = try await service.playlistTracks(playlist.id)
-                    try Task.checkCancellation(); try await repository.store(songs, key: prefix + "playlist.\(playlist.id)")
+                    _ = try await repository.value([Track].self, key: prefix + "playlist.\(playlist.id)", lifetime: Freshness.collection) { try await service.playlistTracks(playlist.id) }
+                    try Task.checkCancellation()
                 }
                 var seen = Set<URL>()
                 for track in tracks.prefix(200) {

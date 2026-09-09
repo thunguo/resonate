@@ -262,4 +262,7 @@ struct PendingMutation: Identifiable, Codable {
     var targetID: Int64
     var liked: Bool?
     var status: String = "等待同步"
+    var operationVersion: Int?
+    var confirmedLiked: Bool?
+    var track: Track?
 }

@@ -36,6 +36,10 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     var arrangementProviderID: UUID?
     var explanationProviderID: UUID?
     var pendingMutations: [PendingMutation] = []
+    @ObservationIgnored private var confirmedMutationRevision = 0
+    @ObservationIgnored private var basicPreheatTask: Task<Void, Never>?
+    @ObservationIgnored private var activeLikeMutations = Set<UUID>()
+    @ObservationIgnored private var activePlaylistTargets = Set<String>()
     var isLoading = false
     var isSyncing = false
     var syncProgress = "正在同步收藏…"
@@ -77,7 +81,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         }
         player.onPlaybackAttempt = { [weak self] in self?.preheater.stop(); self?.recordPlaybackAttempt() }
         player.onPlaybackStart = { [weak self] seconds in self?.recordPlaybackStart(seconds: seconds); self?.schedulePreheat() }
-        player.onTrackPlayed = { [weak self] track in self?.recordPlayed(track) }
+        player.onTrackPlayed = { [weak self] track in self?.recordPlayed(track); self?.prepareCurrentContext() }
         player.onStateChanged = { [weak self] in self?.updateWidget() }
         player.cachedTrack = { [weak self] id in
             guard let self else { return nil }
@@ -152,6 +156,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         try await acceptLogin(LoginResult(cookie: cookie, profile: user))
     }
     func logout() async {
+        basicPreheatTask?.cancel()
         accountGeneration = UUID(); hydrationTask?.cancel(); indexingTask?.cancel(); preheater.stop(); player.clear(); downloads.clearAccount()
         let old = profile?.id ?? 0
         await persistTask?.value
@@ -187,12 +192,13 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     }
     func syncLibrary(refresh: Bool = true) async {
         guard let profile, !isSyncing, refresh || Date().timeIntervalSince(lastLibraryCheck) >= Freshness.collection else { return }
-        let generation = accountGeneration; isSyncing = true; syncError = nil
+        let generation = accountGeneration, mutationRevision = confirmedMutationRevision; isSyncing = true; syncError = nil
         defer { if generation == accountGeneration { isSyncing = false } }
         do {
             let snapshot = try await music.library(userID: profile.id, cached: library) { [self] message in await setSyncProgress(message, generation: generation) }
             guard generation == accountGeneration else { return }
             syncError = snapshot.partialFailures?.joined(separator: "\n")
+            guard mutationRevision == confirmedMutationRevision else { lastLibraryCheck = .distantPast; return }
             library = snapshot; lastLibraryCheck = .now
             saveInBackground(snapshot, key: accountKey("library")); saveHomeSnapshot(); updateWidget(force: true)
         } catch { guard generation == accountGeneration else { return }; syncError = error.localizedDescription; if error as? MusicError == .loginRequired { sessionExpired = true } }
@@ -226,9 +232,53 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
     func requireLogin() -> Bool { if !isLoggedIn { showLogin = true; return false }; return true }
     func toggleLike(_ track: Track) async {
         guard let profile else { showLogin = true; return }
-        guard !pendingMutations.contains(where: { $0.kind == .like && $0.targetID == track.id }) else { notify("这首歌有待同步的更改，请在设置中重试或取消。"); return }
-        let mutation = PendingMutation(accountID: profile.id, kind: .like, trackIDs: [track.id], targetID: track.id, liked: !likedIDs.contains(track.id))
-        pendingMutations.append(mutation); savePending(); await retryMutation(mutation.id, knownTrack: track)
+        let desired = !likedIDs.contains(track.id)
+        let id: UUID
+        if let index = pendingMutations.firstIndex(where: { $0.kind == .like && $0.targetID == track.id && $0.accountID == profile.id }) {
+            pendingMutations[index].liked = desired
+            pendingMutations[index].operationVersion = (pendingMutations[index].operationVersion ?? 0) + 1
+            pendingMutations[index].track = track; id = pendingMutations[index].id
+        } else {
+            var mutation = PendingMutation(accountID: profile.id, kind: .like, trackIDs: [track.id], targetID: track.id, liked: desired)
+            mutation.confirmedLiked = library.likedTracks.contains { $0.id == track.id }; mutation.operationVersion = 1; mutation.track = track
+            pendingMutations.append(mutation); id = mutation.id
+        }
+        savePending(); await retryMutation(id, knownTrack: track)
+    }
+    private func syncLike(_ id: UUID, knownTrack: Track?) async {
+        guard !activeLikeMutations.contains(id), let profile else { return }
+        activeLikeMutations.insert(id); defer { activeLikeMutations.remove(id) }
+        let generation = accountGeneration
+        while let index = pendingMutations.firstIndex(where: { $0.id == id && $0.accountID == profile.id }) {
+            guard generation == accountGeneration, !Task.isCancelled else { return }
+            pendingMutations[index].status = "正在同步"
+            let sent = pendingMutations[index], version = sent.operationVersion ?? 0
+            savePending()
+            do {
+                try await music.setLiked(sent.targetID, liked: sent.liked == true, userID: profile.id)
+                guard generation == accountGeneration else { return }
+                confirmedMutationRevision += 1
+                var confirmed = library
+                let existing = confirmed.likedTracks.first { $0.id == sent.targetID }
+                confirmed.likedTracks.removeAll { $0.id == sent.targetID }
+                if sent.liked == true {
+                    var placeholder = Track(id: sent.targetID, title: "正在读取歌曲资料", artists: [], album: .init(id: 0, name: ""), duration: 0)
+                    placeholder.metadataPending = true
+                    confirmed.likedTracks.insert(sent.track ?? knownTrack ?? existing ?? placeholder, at: 0)
+                }
+                if let current = pendingMutations.firstIndex(where: { $0.id == id }) {
+                    if (pendingMutations[current].operationVersion ?? 0) == version { pendingMutations.remove(at: current) }
+                    else { pendingMutations[current].confirmedLiked = sent.liked }
+                }
+                library = confirmed
+                savePending(); saveInBackground(library, key: accountKey("library")); saveHomeSnapshot()
+            } catch {
+                guard generation == accountGeneration else { return }
+                guard let current = pendingMutations.firstIndex(where: { $0.id == id }) else { return }
+                if (pendingMutations[current].operationVersion ?? 0) != version { continue }
+                pendingMutations[current].status = "同步未确认，点击重试"; savePending(); return
+            }
+        }
     }
     func changePlaylist(_ playlist: Playlist, tracks: [Track], adding: Bool) async {
         guard let profile else { showLogin = true; return }
@@ -236,9 +286,20 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         pendingMutations.append(mutation); savePending(); await retryMutation(mutation.id)
     }
     func retryMutation(_ id: UUID, knownTrack: Track? = nil) async {
+        if pendingMutations.first(where: { $0.id == id })?.kind == .like { await syncLike(id, knownTrack: knownTrack); return }
         guard let index = pendingMutations.firstIndex(where: { $0.id == id }), pendingMutations[index].status != "正在同步", let profile, pendingMutations[index].accountID == profile.id else { return }
-        pendingMutations[index].status = "正在同步"; let mutation = pendingMutations[index]; savePending()
         let generation = accountGeneration
+        let target = pendingMutations[index].targetID
+        let targetKey = "\(generation.uuidString).\(target)"
+        guard !activePlaylistTargets.contains(targetKey) else { return }
+        activePlaylistTargets.insert(targetKey)
+        defer {
+            activePlaylistTargets.remove(targetKey)
+            if generation == accountGeneration, let next = pendingMutations.first(where: { $0.kind != .like && $0.targetID == target && $0.status == "等待同步" }) {
+                Task { await retryMutation(next.id) }
+            }
+        }
+        pendingMutations[index].status = "正在同步"; let mutation = pendingMutations[index]; savePending()
         do {
             switch mutation.kind {
             case .like: try await music.setLiked(mutation.targetID, liked: mutation.liked == true, userID: profile.id)
@@ -247,17 +308,14 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
             }
             guard generation == accountGeneration else { return }
             pendingMutations.removeAll { $0.id == id }; savePending()
-            if mutation.kind != .like { await invalidatePlaylist(mutation.targetID) }
-            if mutation.kind == .like {
-                library.likedTracks.removeAll { $0.id == mutation.targetID }
-                if mutation.liked == true {
-                    if let knownTrack { library.likedTracks.insert(knownTrack, at: 0) }
-                    else {
-                        let tracks = try await music.tracks(ids: [mutation.targetID])
-                        guard generation == accountGeneration else { return }; library.likedTracks += tracks
-                    }
+            if mutation.kind != .like {
+                confirmedMutationRevision += 1
+                await invalidatePlaylist(mutation.targetID)
+                if let tracks = try? await playlistTracks(mutation.targetID, refresh: true), generation == accountGeneration,
+                   let index = library.playlists.firstIndex(where: { $0.id == mutation.targetID }) {
+                    library.playlists[index].count = tracks.count
+                    saveInBackground(library, key: accountKey("library")); saveHomeSnapshot()
                 }
-                saveInBackground(library, key: accountKey("library")); saveHomeSnapshot()
             }
             notify("已同步到网易云音乐")
         } catch {
@@ -265,7 +323,7 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
             if let i = pendingMutations.firstIndex(where: { $0.id == id }) { pendingMutations[i].status = "同步失败，点击重试" }; savePending(); report(error)
         }
     }
-    func discardMutation(_ id: UUID) { pendingMutations.removeAll { $0.id == id }; savePending() }
+    func discardMutation(_ id: UUID) { guard !activeLikeMutations.contains(id), pendingMutations.first(where: { $0.id == id })?.status != "正在同步" else { return }; pendingMutations.removeAll { $0.id == id }; savePending() }
     private func savePending() { rebuildLikedIDs(); persist(pendingMutations, key: accountKey("pending")) }
     func saveConfiguration(_ config: AIProviderConfig, secrets: AISecrets) throws {
         _ = try config.endpoint("chat/completions")
@@ -296,7 +354,8 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         guard url.scheme == "yuyin" else { return }
         if url.host == "resume" { player.resume(); showPlayer = player.current != nil }
         else if url.host == "playlist", let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "id" })?.value, let id = Int64(raw) {
-            Task { do { let tracks = try await playlistTracks(id); player.play(tracks); showPlayer = true } catch { report(error) } }
+            let generation = accountGeneration
+            Task { do { let tracks = try await playlistTracks(id); guard generation == accountGeneration else { return }; player.play(tracks); showPlayer = !tracks.isEmpty } catch { if generation == accountGeneration { report(error) } } }
         }
     }
     private func recordPlayed(_ track: Track) {
@@ -362,6 +421,20 @@ struct AppNotice: Identifiable { let id = UUID(); var message: String }
         var summary = QueueState()
         if let current = player.queue.current { summary.entries = [current]; summary.currentID = current.id; summary.position = player.position }
         saveInBackground(HomeSnapshot(tracks: Array(library.likedTracks.prefix(12)), discoveries: Array(discoveries.prefix(6)), currentQueue: summary), key: accountKey("home"))
+    }
+    private func prepareCurrentContext() {
+        basicPreheatTask?.cancel()
+        guard !previewMode, let track = player.current else { return }
+        let generation = accountGeneration
+        let covers = ([track] + player.queue.upcoming.prefix(2).map(\.track)).compactMap { $0.album.artwork }
+        basicPreheatTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            _ = try? await lyricLines(track.id)
+            for url in covers {
+                guard generation == accountGeneration, !Task.isCancelled else { return }
+                _ = try? await ArtworkStore.shared.image(url, pixels: 160)
+            }
+        }
     }
     func schedulePreheat() {
         guard !previewMode, preferences.smartPreheat else { preheater.stop(); return }

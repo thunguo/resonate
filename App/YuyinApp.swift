@@ -21,8 +21,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         let preview = false
         #endif
+        let music: MusicService
+        #if DEBUG
+        music = ProcessInfo.processInfo.arguments.contains("--search-test") ? MusicService(transport: SearchPreviewTransport()) : MusicService()
+        #else
+        music = MusicService()
+        #endif
         if !preview { AppDiagnostics.shared.start() }
-        do { _store = State(initialValue: AppStore(persistence: try LocalPersistence(inMemory: preview), preview: preview)) }
+        do { _store = State(initialValue: AppStore(persistence: try LocalPersistence(inMemory: preview), preview: preview, music: music)) }
         catch { _startupError = State(initialValue: "无法打开本地音乐资料。请检查设备可用空间后重新打开。") }
         let navigation = UINavigationBarAppearance(); navigation.configureWithTransparentBackground()
         UINavigationBar.appearance().standardAppearance = navigation; UINavigationBar.appearance().scrollEdgeAppearance = navigation

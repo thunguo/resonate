@@ -27,6 +27,7 @@
 		616041EB2EB187798E32EEE5 /* IntelligenceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3230BA6C518D8BD0E3C5D9E /* IntelligenceViews.swift */; };
 		62514405326A064734AAE607 /* PreviewTracks.json in Resources */ = {isa = PBXBuildFile; fileRef = 95B40A481E6456391D1FE19E /* PreviewTracks.json */; };
 		6CAA67373F426F9DA3AFD525 /* PreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9991D0D6B9A0F139B442292E /* PreviewFixtures.swift */; };
+		780FEDE47E21FCA9CAA519C9 /* MutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE40DC9764E3767229B8FC8 /* MutationTests.swift */; };
 		79D33F41FBBC778C677DC136 /* ArtworkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715996019F0269517EB0FC36 /* ArtworkStore.swift */; };
 		89B4F118DA399A12DF4345CD /* CollectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6962A22ED1E3526ECF8530F /* CollectionDetailView.swift */; };
 		8FA82199EBF95DE0DBA9BF78 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8383293CB935A7FB493A509D /* PlayerView.swift */; };
@@ -96,6 +97,7 @@
 		0A9270108D031EA44B8677FB /* YuyinTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = YuyinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		101812EC0053C403AFF8EE3F /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		134FD8493E89039E33565AC8 /* YuyinWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = YuyinWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1AE40DC9764E3767229B8FC8 /* MutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MutationTests.swift; sourceTree = "<group>"; };
 		2338894994931ED832419338 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		278AA36A8C0CA4A75DF56AF5 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2D803F4B5B123E384729408B /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -180,6 +182,7 @@
 		49DE3101CD1C55BC16E81F15 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				1AE40DC9764E3767229B8FC8 /* MutationTests.swift */,
 				BFBDB283C4159B3CA0C630F5 /* PerformanceTests.swift */,
 				47025733BEB52DDE10B28916 /* PlaybackReliabilityTests.swift */,
 				CE8F265C8CB8D997BDA943ED /* PlaybackTests.swift */,
@@ -505,6 +508,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				780FEDE47E21FCA9CAA519C9 /* MutationTests.swift in Sources */,
 				E6483B8A71C139A72392B1E9 /* PerformanceTests.swift in Sources */,
 				0F9470B844FBC289EFC0008A /* PlaybackReliabilityTests.swift in Sources */,
 				613B516E94CA7D10A6737951 /* PlaybackTests.swift in Sources */,
@@ -707,7 +711,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -720,7 +724,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -784,7 +788,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -803,7 +807,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -868,7 +872,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -887,7 +891,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1023,7 +1027,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1036,7 +1040,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1100,7 +1104,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1113,7 +1117,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

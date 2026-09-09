@@ -93,7 +93,7 @@ private func completion<T: Encodable>(_ value: T) throws -> String {
     #expect(sources.map(\.id) == ["track", "artist"])
 }
 @Test func partialLibraryFailureKeepsOnlyFailedCategoriesOld() async throws {
-    let transport = ReplayTransport([#"{"code":200,"ids":[2]}"#, #"{"code":200,"songs":[{"id":2,"name":"新收藏"}]}"#, #"{"code":500}"#, #"{"code":200,"data":[],"more":false}"#, #"{"code":200,"data":[],"more":false}"#])
+    let transport = PartialLibraryFixture()
     let music = MusicService(transport: transport); await music.setCookie("fixture")
     var cached = LibrarySnapshot(accountID: 7, likedTracks: [song(1)], playlists: [.init(id: 9, name: "保留的歌单")])
     cached.syncedAt = Date(timeIntervalSince1970: 0)
@@ -133,4 +133,17 @@ private func completion<T: Encodable>(_ value: T) throws -> String {
     let transport = ReplayTransport([#"{"code":200,"data":[{"id":1,"code":403,"url":"https://example.com/1"},{"id":2,"code":200,"url":"https://example.com/2"},{"id":3,"code":200,"url":"https://example.com/3","freeTrialInfo":{"start":0,"end":30}}]}"#])
     let tracks = try await MusicService(transport: transport).playableCandidates([song(1), song(2), song(3)])
     #expect(tracks.map(\.id) == [2])
+}
+
+private actor PartialLibraryFixture: HTTPTransport {
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let response: String
+        switch request.url!.lastPathComponent {
+        case "likelist": response = #"{"code":200,"ids":[2]}"#
+        case "detail": response = #"{"code":200,"songs":[{"id":2,"name":"新收藏"}]}"#
+        case "playlist": response = #"{"code":500}"#
+        default: response = #"{"code":200,"data":[],"more":false}"#
+        }
+        return (Data(response.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
 }

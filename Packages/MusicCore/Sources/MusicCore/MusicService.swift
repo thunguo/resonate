@@ -49,8 +49,9 @@ public actor MusicService {
     private let transport: any HTTPTransport
     private var cookie = ""
     private var sessionRevision = UUID()
+    private var pendingRequests: [UUID: Task<(Data, HTTPURLResponse), Error>] = [:]
     public init(baseURL: URL = URL(string: "https://music.thunguo.space")!, transport: any HTTPTransport = PrivateTransport()) { self.baseURL = baseURL; self.transport = transport }
-    public func setCookie(_ value: String) { cookie = value; sessionRevision = UUID() }
+    public func setCookie(_ value: String) { pendingRequests.values.forEach { $0.cancel() }; pendingRequests = [:]; cookie = value; sessionRevision = UUID() }
     public func request(_ path: String, parameters: [String: JSONValue] = [:], authenticated: Bool = false) async throws -> JSONValue {
         guard baseURL.scheme == "https", baseURL.host != nil else { throw MusicError.invalidConfiguration("音乐服务地址需要使用 HTTPS。") }
         if authenticated && cookie.isEmpty { throw MusicError.loginRequired }
@@ -65,7 +66,11 @@ public actor MusicService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await transport.data(for: request)
+        let requestID = UUID(), preparedRequest = request
+        let task = Task { try await transport.data(for: preparedRequest) }
+        pendingRequests[requestID] = task
+        defer { pendingRequests[requestID] = nil }
+        let (data, response) = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         try Task.checkCancellation()
         guard revision == sessionRevision else { throw MusicError.staleSession }
         guard !(300..<400).contains(response.statusCode) else { throw MusicError.message("音乐服务发生了重定向，请检查服务地址。") }
@@ -349,11 +354,13 @@ public actor MusicService {
         return Playlist(json: j["playlist"])
     }
     public func editPlaylist(_ id: Int64, tracks ids: [Int64], adding: Bool) async throws {
+        let revision = sessionRevision
         let current = Set(try await playlistTracks(id).map(\.id))
         var seen = Set<Int64>()
         let pending = ids.filter { seen.insert($0).inserted && (adding ? !current.contains($0) : current.contains($0)) }
         for start in stride(from: 0, to: pending.count, by: 100) {
             try Task.checkCancellation()
+            guard revision == sessionRevision else { throw MusicError.staleSession }
             let batch = pending[start..<min(start + 100, pending.count)]
             _ = try await request("playlist/tracks", parameters: ["pid": .string(String(id)), "tracks": .string(batch.map(String.init).joined(separator: ",")), "op": .string(adding ? "add" : "del")], authenticated: true)
         }

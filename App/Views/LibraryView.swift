@@ -8,7 +8,11 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 struct LibraryView: View {
     @Environment(AppStore.self) private var store
     @State private var section = LibrarySection.favorites
-    @State private var filter = ""
+    @State private var filters: [LibrarySection: String] = [:]
+    @State private var anchors: [LibrarySection: String] = [:]
+    private var filter: String { filters[section] ?? "" }
+    private var filterBinding: Binding<String> { Binding(get: { filter }, set: { filters[section] = $0 }) }
+    private var anchor: Binding<String?> { let selected = section; return Binding(get: { anchors[selected] }, set: { anchors[selected] = $0 }) }
     @State private var newPlaylist = false
     private var sort: LibrarySort { store.preferences.librarySort[section.rawValue] ?? .original }
     @State private var filteredTracks: [Track] = []
@@ -26,14 +30,14 @@ struct LibraryView: View {
                 }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(LibrarySection.allCases) { item in Button { section = item } label: { Text(item.rawValue).font(.body.weight(section == item ? .semibold : .regular)).padding(.horizontal, 10).frame(minHeight: 44).foregroundStyle(section == item ? Palette.text : Palette.secondary).overlay(alignment: .bottom) { if section == item { Capsule().fill(Palette.accent).frame(height: 2) } } }.buttonStyle(.plain) }
+                        ForEach(LibrarySection.allCases.filter { $0 != .downloads || !store.downloads.records.isEmpty }) { item in Button { section = item } label: { Text(item.rawValue).font(.body.weight(section == item ? .semibold : .regular)).padding(.horizontal, 10).frame(minHeight: 44).foregroundStyle(section == item ? Palette.text : Palette.secondary).overlay(alignment: .bottom) { if section == item { Capsule().fill(Palette.accent).frame(height: 2) } } }.buttonStyle(.plain) }
                     }
                 }
                 if section != .downloads {
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundStyle(Palette.secondary)
-                        TextField("在\(section.rawValue)中查找", text: $filter).submitLabel(.search)
-                        if !filter.isEmpty { Button { filter = "" } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }.accessibilityLabel("清除筛选") }
+                        TextField("在\(section.rawValue)中查找", text: filterBinding).submitLabel(.search)
+                        if !filter.isEmpty { Button { filters[section] = "" } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }.accessibilityLabel("清除筛选") }
                         Menu { ForEach(LibrarySort.allCases.filter { $0 != .artist || section == .favorites || section == .albums }) { value in
                             Button { store.preferences.librarySort[section.rawValue] = value; store.savePreferences() } label: { Label(value.label, systemImage: sort == value ? "checkmark" : "") }
                         } } label: { Image(systemName: "arrow.up.arrow.down").frame(width: 44, height: 44) }.accessibilityLabel("排序")
@@ -45,15 +49,15 @@ struct LibraryView: View {
                 if store.pendingCreation != nil { Button("核对上次创建的歌单") { newPlaylist = true }.frame(minHeight: 44) }
                 content
                 if !filter.isEmpty, matchCount == 0 { Text("没有找到匹配的收藏").font(.subheadline).foregroundStyle(Palette.secondary).padding(.vertical, 20) }
-            }.padding(20)
-        }.cabinetBackground().toolbar(.hidden, for: .navigationBar).refreshable { await store.syncLibrary() }
+            }.scrollTargetLayout().padding(20)
+        }.scrollPosition(id: anchor, anchor: .top).cabinetBackground().toolbar(.hidden, for: .navigationBar).refreshable { await store.syncLibrary() }
         .task(id: filterKey) {
             let library = store.library, query = filter, order = sort, pinned = store.preferences.pinnedPlaylists
             let value = await Task.detached(priority: .userInitiated) { LibraryDisplay.make(library, query: query, order: order, pinned: pinned) }.value
             guard !Task.isCancelled else { return }
             filteredTracks = value.tracks; playlists = value.playlists; albums = value.albums; artists = value.artists
         }
-        .onChange(of: section) { _, _ in filter = "" }
+        .onChange(of: store.accountGeneration) { _, _ in filters = [:]; anchors = [:]; section = .favorites }
         .sheet(isPresented: $newPlaylist) { PlaylistCreationView() }
 
     }
@@ -66,14 +70,14 @@ struct LibraryView: View {
                     Spacer()
                     Button { store.player.play(filteredTracks) } label: { Label("播放", systemImage: "play.fill").font(.subheadline.weight(.medium)).frame(minHeight: 44) }.buttonStyle(MusicPressStyle()).disabled(filteredTracks.isEmpty)
                 }
-                LazyVStack(spacing: 0) { ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { i, track in TrackRow(track: track) { store.player.play(filteredTracks, at: i) } } }
+                LazyVStack(spacing: 0) { ForEach(Array(filteredTracks.enumerated()), id: \.element.id) { i, track in TrackRow(track: track) { store.player.play(filteredTracks, at: i) }.id("track-\(track.id)") } }.scrollTargetLayout()
             } else { EmptyState(symbol: "heart", title: "喜欢会慢慢积累", detail: "遇到想再听一次的歌，点一下喜欢。") }
         case .playlists:
             HStack { SectionHeading(title: "你的歌单"); IconButton(symbol: "plus", label: "新建歌单") { if store.requireLogin() { newPlaylist = true } } }
             ForEach(playlists) { playlist in
                 NavigationLink { CollectionDetailView(playlist: playlist) } label: {
                     HStack(spacing: 14) { Artwork(url: playlist.artwork, size: 62); VStack(alignment: .leading, spacing: 6) { Text(playlist.name).lineLimit(2); Text("\(playlist.count) 首").font(.caption).foregroundStyle(Palette.secondary) }; Spacer(); if store.preferences.pinnedPlaylists.contains(playlist.id) { Image(systemName: "pin.fill").font(.caption).foregroundStyle(Palette.accent) } }
-                }.buttonStyle(.plain).contextMenu { Button(store.preferences.pinnedPlaylists.contains(playlist.id) ? "取消固定" : "固定歌单", systemImage: "pin") { store.pinPlaylist(playlist.id) } }
+                }.buttonStyle(.plain).id("playlist-\(playlist.id)").contextMenu { Button(store.preferences.pinnedPlaylists.contains(playlist.id) ? "取消固定" : "固定歌单", systemImage: "pin") { store.pinPlaylist(playlist.id) } }
             }
             if store.library.playlists.isEmpty { EmptyState(symbol: "music.note.list", title: "留一张歌单", detail: "同步网易云歌单，或将一段新的听歌体验保存下来。") }
         case .albums:
@@ -91,7 +95,7 @@ struct LibraryView: View {
 struct PendingSyncView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
-        List { ForEach(store.pendingMutations) { item in VStack(alignment: .leading, spacing: 8) { Text(item.kind == .like ? "更新喜欢的歌曲" : "更新歌单"); Text(item.status).font(.caption).foregroundStyle(Palette.secondary); HStack { Button("重试") { Task { await store.retryMutation(item.id) } }.disabled(item.status == "正在同步"); Spacer(); Button("取消重试", role: .destructive) { store.discardMutation(item.id) } } }.listRowBackground(Palette.background) } }.cabinetList().navigationTitle("待同步更改")
+        List { ForEach(store.pendingMutations) { item in VStack(alignment: .leading, spacing: 8) { Text(item.kind == .like ? "更新喜欢的歌曲" : "更新歌单"); Text(item.status).font(.caption).foregroundStyle(Palette.secondary); HStack { Button("重试") { Task { await store.retryMutation(item.id) } }.disabled(item.status == "正在同步"); Spacer(); Button("取消重试", role: .destructive) { store.discardMutation(item.id) }.disabled(item.status == "正在同步") } }.listRowBackground(Palette.background) } }.cabinetList().navigationTitle("待同步更改")
     }
 }
 struct DownloadListContent: View {

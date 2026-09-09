@@ -169,3 +169,32 @@ extension YuyinUITests {
         if let title { XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5)); XCTAssertTrue(app.staticTexts[title].isHittable) }
     }
 }
+
+extension YuyinUITests {
+    func testSearchSwitchAndClearDoNotCarryPreviousCategory() {
+        let app = launch(["--search-test"])
+        app.tabBars.buttons["搜索"].tap()
+        let field = app.textFields["searchField"]; field.tap(); field.typeText("fixture")
+        XCTAssertTrue(app.staticTexts["曲目0"].waitForExistence(timeout: 5))
+        app.segmentedControls.buttons["专辑"].tap()
+        XCTAssertTrue(app.staticTexts["专辑0"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["曲目0"].exists)
+        app.buttons["清空搜索"].tap()
+        XCTAssertFalse(app.buttons["searchMore"].exists); XCTAssertFalse(app.staticTexts["专辑0"].exists)
+        XCTAssertTrue(app.staticTexts["最近找过"].exists)
+    }
+    func testSearchPaginationFailureRetriesWithoutDroppingResults() {
+        let app = launch(["--search-test"])
+        app.tabBars.buttons["搜索"].tap()
+        let field = app.textFields["searchField"]; field.tap(); field.typeText("fixture")
+        XCTAssertTrue(app.staticTexts["曲目0"].waitForExistence(timeout: 5))
+        for _ in 0..<14 where !app.buttons["searchMore"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.buttons["searchMore"].isHittable); app.buttons["searchMore"].tap()
+        for _ in 0..<14 where !app.buttons["重试"].isHittable { app.swipeDown() }
+        XCTAssertTrue(app.buttons["重试"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["曲目0"].exists)
+        app.buttons["重试"].tap()
+        for _ in 0..<14 where !app.staticTexts["曲目31"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["曲目31"].exists)
+    }
+}

@@ -36,3 +36,22 @@ extension AppStore {
     }
 }
 #endif
+
+#if DEBUG
+actor SearchPreviewTransport: HTTPTransport {
+    private var failedPage = false
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let body = try JSONDecoder().decode(JSONValue.self, from: request.httpBody ?? Data())
+        let offset = body["offset"].int, kind = body["type"].int
+        if offset == 30 && !failedPage {
+            failedPage = true
+            return (Data(#"{"code":503}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: nil)!)
+        }
+        let entries = (offset..<offset + 30).map { index in
+            JSONValue.object(["id": .number(Double(index + 100)), "name": .string((kind == 10 ? "专辑" : "曲目") + String(index)), "dt": .number(180000), "ar": .array([.object(["id": .number(1), "name": .string("测试音乐人")])])])
+        }
+        let json = JSONValue.object(["code": .number(200), "result": .object([kind == 10 ? "albums" : "songs": .array(entries), kind == 10 ? "albumCount" : "songCount": .number(60)])])
+        return (try JSONEncoder().encode(json), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+    }
+}
+#endif
