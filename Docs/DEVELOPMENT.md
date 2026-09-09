@@ -44,6 +44,10 @@ swift run --package-path Packages/MusicCore MusicProbe
 
 它会请求公共搜索、详情、歌词、推荐与播放资源信息，不下载音频，不执行账号写入。其结果不能替代真实登录、会员播放、模型调用或真机后台测试。
 
+## 诊断与回归记录
+
+设置中的“诊断与反馈”可预览和导出本机白名单计时，默认不上传。当前实测、模拟验证和待验收项目见 [质量记录](QUALITY.md)。
+
 ## 性能验收
 
 在 Release 或 `PersonalRelease` 构建中，用 Instruments 的 SwiftUI、Time Profiler、Animation Hitches 和 App Launch 模板检查实际设备。先预热页面，再记录多次进入的内容呈现时间；首次迁移、首次登录和全新远程搜索分开统计。核心测试验证缓存命中、请求合并、账号隔离与大歌单完整性，不能代替真机帧率和网络条件验收。

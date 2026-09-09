@@ -4,6 +4,27 @@ import MediaPlayer
 import Observation
 import MusicCore
 
+enum PlaybackPhase: String, Equatable {
+    case idle, restoring, preparing, playing, paused, interrupted, ended, failed
+    var label: String {
+        switch self {
+        case .idle: "还没有正在听的歌"
+        case .restoring: "恢复中"
+        case .preparing: "准备播放"
+        case .playing: "正在播放"
+        case .paused: "已暂停"
+        case .interrupted: "播放已中断"
+        case .ended: "播放结束"
+        case .failed: "暂时无法播放"
+        }
+    }
+}
+struct PlaybackSnapshot: Equatable {
+    var phase: PlaybackPhase
+    var trackID: Int64?
+    var offersPause: Bool
+}
+
 @MainActor @Observable final class PlaybackController {
     var queue = QueueState()
     var restorationPending = false
@@ -17,6 +38,12 @@ import MusicCore
     private(set) var resource: PlaybackResource?
     private(set) var error: String?
     private(set) var sleepDate: Date?
+    private(set) var isInterrupted = false
+    @ObservationIgnored private var seekTask: Task<Void, Never>?
+    @ObservationIgnored private var seekID = UUID()
+    @ObservationIgnored private var isSeeking = false
+    @ObservationIgnored private var preparationMeasurement: PerformanceInterval?
+    @ObservationIgnored private var bufferingMeasurement: PerformanceInterval?
     var quality: AudioQuality = .exhigh { didSet { if oldValue != quality { discardPrepared(); prepareNext() } } }
     var onCheckpoint: ((PlaybackCheckpoint) -> Void)?
     var onSave: ((QueueState) -> Void)?
@@ -36,9 +63,9 @@ import MusicCore
     @ObservationIgnored private var notifications: [NSObjectProtocol] = []
     @ObservationIgnored private var loadingTask: Task<Void, Never>?
     @ObservationIgnored private var sleepTask: Task<Void, Never>?
-    @ObservationIgnored private var wantsPlayback = false
+    private var wantsPlayback = false
     @ObservationIgnored private var resolving = false
-    @ObservationIgnored private var reachedEnd = false
+    private var reachedEnd = false
     @ObservationIgnored private var attemptStartedAt: Date?
     @ObservationIgnored private var reportedStart = false
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
@@ -70,20 +97,32 @@ import MusicCore
             Task { @MainActor in guard let self, (n.object as? AVPlayerItem) === self.player.currentItem else { return }; self.handleFailure() }
         })
         notifications.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in guard let self else { return }; let resume = self.wantsPlayback; self.loadingTask?.cancel(); self.loadID = UUID(); self.player.removeAllItems(); self.itemObservation = nil; self.prefetchTask?.cancel(); self.prefetched = nil; self.queue.position = self.position; if resume { self.loadCurrent(retrying: true) } else { self.pause() } }
+            Task { @MainActor in guard let self else { return }; let resume = self.wantsPlayback; self.loadingTask?.cancel(); self.loadID = UUID(); self.player.removeAllItems(); self.itemObservation = nil; self.prefetchTask?.cancel(); self.discardPrepared(); self.queue.position = self.position; if resume { self.loadCurrent(retrying: true) } else { self.pause() } }
         })
         installRemoteCommands()
     }
     private(set) var currentTrackID: Int64?
     var current: Track? { queue.current?.track }
     var isPreview: Bool { resource?.availability == .preview }
+    var snapshot: PlaybackSnapshot {
+        let phase: PlaybackPhase
+        if restorationPending { phase = .restoring }
+        else if current == nil { phase = .idle }
+        else if error != nil { phase = .failed }
+        else if isInterrupted { phase = .interrupted }
+        else if isPlaying { phase = .playing }
+        else if isBuffering { phase = .preparing }
+        else if reachedEnd { phase = .ended }
+        else { phase = .paused }
+        return .init(phase: phase, trackID: currentTrackID, offersPause: isPlaying || isBuffering || (isInterrupted && wantsPlayback))
+    }
     func restore(_ state: QueueState) { queue = state; currentTrackID = state.current?.track.id; position = state.position; duration = state.current?.track.duration ?? 0; updateNowPlaying() }
     func play(_ tracks: [Track], at index: Int = 0, origin: QueueOrigin = .playlist) {
         guard !tracks.isEmpty else { return }
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
         previousQueue = queue; queue.replace(tracks, startingAt: index, origin: origin); retryCount = 0; loadCurrent()
     }
-    func toggle() { isPlaying || isBuffering ? pause() : resume() }
+    func toggle() { snapshot.offersPause ? pause() : resume() }
     func finishRestoration(_ state: QueueState?) {
         if restorationPending, let state { restore(state) }
         restorationPending = false
@@ -94,7 +133,9 @@ import MusicCore
     }
     func resume() {
         if restorationPending { resumeAfterRestoration = true; isBuffering = true; return }
+        guard current != nil else { return }
         wantsPlayback = true
+        guard !isInterrupted else { return }
         if player.currentItem == nil || player.currentItem?.status == .failed {
             retryCount = 0; queue.position = position; loadCurrent()
         } else if reachedEnd {
@@ -104,17 +145,33 @@ import MusicCore
     }
     func pause() { if restorationPending { resumeAfterRestoration = false; isBuffering = false; return }; wantsPlayback = false; player.pause(); isPlaying = false; isBuffering = false; save(); updateNowPlaying() }
     func next() {
-        if let preparedQueue { queue = preparedQueue; retryCount = 0; loadCurrent() }
+        if let preparedQueue = validPreparedQueue { queue = preparedQueue; retryCount = 0; loadCurrent() }
         else if queue.advance(manual: true) { retryCount = 0; loadCurrent() } else { pause() }
     }
     func previous() { queue.position = position; queue.previous(); retryCount = 0; loadCurrent() }
     func jump(_ id: UUID) { guard queue.entries.contains(where: { $0.id == id }) else { return }; queue.currentID = id; queue.position = 0; retryCount = 0; loadCurrent() }
     func seek(_ seconds: Double) {
-        if restorationPending { pendingSeek = seconds; position = seconds; return }
+        guard seconds.isFinite else { return }
+        if restorationPending { pendingSeek = max(0, seconds); position = max(0, seconds); return }
         let time = min(max(0, seconds), max(0, duration))
-        position = time; queue.position = time
-        player.seek(to: CMTime(seconds: time, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        position = time; queue.position = time; reachedEnd = false
+        seekTask?.cancel(); seekID = UUID()
+        if player.currentItem?.status == .readyToPlay { performSeek(time) }
+        else { restoredPosition = time }
         save(); updateNowPlaying()
+    }
+    private func performSeek(_ time: Double) {
+        seekTask?.cancel()
+        let token = UUID(), generation = loadID
+        seekID = token; isSeeking = true
+        seekTask = Task { [weak self] in
+            guard let self else { return }
+            _ = await player.seek(to: CMTime(seconds: time, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            guard !Task.isCancelled, generation == loadID, token == seekID else { return }
+            isSeeking = false
+            if wantsPlayback, !isInterrupted, activateAudio() { player.play() }
+            updateNowPlaying()
+        }
     }
     func enqueue(_ tracks: [Track], next: Bool = false) { if restorationPending { pendingAppends.append((tracks, next)); return }; previousQueue = queue; queue.append(tracks, next: next); save() }
     @discardableResult func apply(_ arrangement: Arrangement) -> Bool {
@@ -125,10 +182,11 @@ import MusicCore
         guard let previousQueue else { return }
         let changedCurrent = queue.currentID != previousQueue.currentID
         queue = previousQueue; self.previousQueue = nil
-        if changedCurrent { loadCurrent() } else { save() }
+        if changedCurrent { loadCurrent(startPlaying: wantsPlayback) } else { save() }
     }
     func clear() {
         restorationPending = false; resumeAfterRestoration = false; pendingAppends = []; pendingSeek = nil
+        seekTask?.cancel(); isSeeking = false; isInterrupted = false; preparationMeasurement?.end(.cancelled); preparationMeasurement = nil; bufferingMeasurement?.end(.cancelled); bufferingMeasurement = nil
         loadingTask?.cancel(); prefetchTask?.cancel(); prefetched = nil; loadID = UUID(); player.pause(); player.removeAllItems()
         resolving = false; reachedEnd = false; attemptStartedAt = nil; reportedStart = false
         queue = .init(); previousQueue = nil; resourceCache = [:]; preparedQueue = nil; resource = nil; position = 0; duration = 0; error = nil; isPlaying = false; isBuffering = false; wantsPlayback = false
@@ -148,7 +206,15 @@ import MusicCore
         prefetchTask?.cancel(); prefetchKey = nil; prefetched = nil; preparedQueue = nil
         for item in player.items().dropFirst() { player.remove(item) }
     }
-    private func loadCurrent(retrying: Bool = false) {
+    private var validPreparedQueue: QueueState? {
+        guard let preparedQueue, preparedQueue.entries == queue.entries,
+              preparedQueue.shuffle == queue.shuffle, preparedQueue.repeatMode == queue.repeatMode else { return nil }
+        return preparedQueue
+    }
+    private func loadCurrent(retrying: Bool = false, startPlaying: Bool = true) {
+        seekTask?.cancel(); isSeeking = false
+        preparationMeasurement?.end(.cancelled)
+        preparationMeasurement = PerformanceInterval(.playbackPreparation)
         loadingTask?.cancel(); prefetchTask?.cancel(); prefetchKey = nil; let generation = UUID(); loadID = generation
         resolving = true; reachedEnd = false
         guard let track = current else { resolving = false; isBuffering = false; wantsPlayback = false; return }; currentTrackID = track.id
@@ -159,7 +225,7 @@ import MusicCore
         if !reusable { player.pause(); player.removeAllItems() }
         itemObservation = nil
         position = queue.position; restoredPosition = queue.position; duration = track.duration; error = nil; resource = nil; nowPlayingArtwork = nil
-        wantsPlayback = true; isPlaying = false; isBuffering = true
+        wantsPlayback = startPlaying; isPlaying = false; isBuffering = startPlaying && !isInterrupted
         let localURL = offlineURL?(track)
         prefetched = nil; preparedQueue = nil
         loadingTask = Task { [weak self] in
@@ -197,12 +263,8 @@ import MusicCore
                             let actual = self.player.currentItem?.duration.seconds ?? 0
                             if actual.isFinite && actual > 0 { self.duration = actual }
                             let restored = self.restoredPosition; self.restoredPosition = 0
-                            if restored > 0 {
-                                let target = restored >= self.duration - 0.5 ? 0 : restored
-                                _ = await self.player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-                                guard generation == self.loadID else { return }
-                            }
-                            if self.wantsPlayback, self.activateAudio() { self.player.play() }
+                            if restored > 0 { self.performSeek(min(restored, max(0, self.duration - 0.05))) }
+                            else if self.wantsPlayback, !self.isInterrupted, self.activateAudio() { self.player.play() }
                             self.updateNowPlaying(); self.prepareNext()
                         } else if status == .failed { self.handleFailure() }
                     }
@@ -216,6 +278,7 @@ import MusicCore
             } catch is CancellationError { }
             catch {
                 guard generation == loadID else { return }
+                preparationMeasurement?.end(.failed); preparationMeasurement = nil
                 self.error = error.localizedDescription; resolving = false; isBuffering = false; wantsPlayback = false; updateNowPlaying()
             }
         }
@@ -260,13 +323,16 @@ import MusicCore
         }
     }
     private func tick(_ seconds: Double) {
-        guard seconds.isFinite, player.currentItem != nil else { return }
+        guard seconds.isFinite, player.currentItem != nil, !isSeeking, restoredPosition == 0 else { return }
         position = max(0, seconds)
         if abs(position - lastSavedAt) > 10 { lastSavedAt = position; checkpoint() }
     }
     private func updateStatus() {
-        isPlaying = player.timeControlStatus == .playing
-        isBuffering = wantsPlayback && (resolving || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
+        isPlaying = wantsPlayback && !isInterrupted && player.timeControlStatus == .playing
+        isBuffering = wantsPlayback && !isInterrupted && (resolving || player.currentItem?.status == .unknown || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
+        if isBuffering, bufferingMeasurement == nil { bufferingMeasurement = PerformanceInterval(.playbackBuffering) }
+        if !isBuffering { bufferingMeasurement?.end(isPlaying ? .success : .cancelled); bufferingMeasurement = nil }
+        if isPlaying { preparationMeasurement?.end(.success); preparationMeasurement = nil }
         if isPlaying, !reportedStart, let track = current {
             reportedStart = true; onTrackPlayed?(track)
             if let attemptStartedAt { onPlaybackStart?(max(0, Date().timeIntervalSince(attemptStartedAt))) }
@@ -280,7 +346,7 @@ import MusicCore
             seek(0); if activateAudio() { player.play() }; return
         }
         reachedEnd = true
-        if let preparedQueue { queue = preparedQueue; retryCount = 0; loadCurrent() }
+        if let preparedQueue = validPreparedQueue { queue = preparedQueue; retryCount = 0; loadCurrent() }
         else if queue.advance() { retryCount = 0; loadCurrent() }
         else if queue.autoplay, let continuationTracks {
             let generation = loadID
@@ -298,8 +364,13 @@ import MusicCore
     }
     private func interrupted(_ notification: Notification) {
         guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, let type = AVAudioSession.InterruptionType(rawValue: value) else { return }
-        if type == .began { player.pause(); save() }
-        else if wantsPlayback, let raw = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt, AVAudioSession.InterruptionOptions(rawValue: raw).contains(.shouldResume) { resume() }
+        if type == .began { isInterrupted = true; player.pause(); isPlaying = false; isBuffering = false; save(); updateNowPlaying() }
+        else {
+            isInterrupted = false
+            let raw = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            if wantsPlayback, AVAudioSession.InterruptionOptions(rawValue: raw).contains(.shouldResume) { resume() }
+            else { pause() }
+        }
     }
     private func installRemoteCommands() {
         let commands = MPRemoteCommandCenter.shared()

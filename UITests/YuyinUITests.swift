@@ -54,7 +54,7 @@ final class YuyinUITests: XCTestCase {
     func testLargeTextKeepsPlayerControlsReachable() throws {
         let app = launch(["--player", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXL"])
         XCTAssertTrue(app.buttons["mainPlayPause"].waitForExistence(timeout: 10))
-        if !app.buttons["queueButton"].isHittable { app.swipeUp() }
+        XCTAssertTrue(app.buttons["mainPlayPause"].isHittable)
         XCTAssertTrue(app.buttons["queueButton"].isHittable)
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = "播放器-大字体"; attachment.lifetime = .keepAlways; add(attachment)
     }

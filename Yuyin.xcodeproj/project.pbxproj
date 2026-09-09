@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0393570CC20795AC5CE7E0DD /* AppDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77577B92FBBF28A01125D20E /* AppDiagnostics.swift */; };
 		076F99CD6674659DACA30F31 /* ListeningIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E8C586A8AEED4D98E5CB170 /* ListeningIntents.swift */; };
 		0EB3EA8D60C9ACED5BFEEA27 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101812EC0053C403AFF8EE3F /* CarPlaySceneDelegate.swift */; };
+		0F9470B844FBC289EFC0008A /* PlaybackReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47025733BEB52DDE10B28916 /* PlaybackReliabilityTests.swift */; };
 		295E6EB8958C0B568DEE4877 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18D134BF7B4C057175EAF91 /* SearchView.swift */; };
 		2A74DAFCD856BA4DAA96DE4C /* ListeningIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E8C586A8AEED4D98E5CB170 /* ListeningIntents.swift */; };
 		391EADA2935A0E23884FAC17 /* LocalMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D3051AD55350348FAB19096 /* LocalMetrics.swift */; };
@@ -48,6 +50,7 @@
 		F1AE07150584B29E911D37C0 /* YuyinWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 134FD8493E89039E33565AC8 /* YuyinWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F31E2092C1FE57255B7EC411 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 278AA36A8C0CA4A75DF56AF5 /* PrivacyInfo.xcprivacy */; };
 		F44F6548A1FC0E39640A596A /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ACD8D18E421CE427B8422EC /* WidgetSnapshot.swift */; };
+		F65F7C425E58712DCCEAC54B /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEFFC9A7E30BEB11DDDDBD5 /* DiagnosticsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,8 +103,10 @@
 		3AD3A19E2580FDC8537A0C3C /* LibraryCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCache.swift; sourceTree = "<group>"; };
 		3D3051AD55350348FAB19096 /* LocalMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalMetrics.swift; sourceTree = "<group>"; };
 		4673F0DA3BFB9D37EE22F217 /* YuyinApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YuyinApp.swift; sourceTree = "<group>"; };
+		47025733BEB52DDE10B28916 /* PlaybackReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackReliabilityTests.swift; sourceTree = "<group>"; };
 		4A06BD6BECB9D1C3B1373F89 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4B9AB7931A62322D64192321 /* YuyinWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YuyinWidget.swift; sourceTree = "<group>"; };
+		4BEFFC9A7E30BEB11DDDDBD5 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		4F7458B154C90D4967346E9F /* Yuyin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Yuyin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5115DC5C86628DBC53723F4C /* StorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageTests.swift; sourceTree = "<group>"; };
 		65F555E7A9B748E5189F0802 /* PlaylistEditingViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistEditingViews.swift; sourceTree = "<group>"; };
@@ -112,6 +117,7 @@
 		715996019F0269517EB0FC36 /* ArtworkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkStore.swift; sourceTree = "<group>"; };
 		737069220449E270A0156CF8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		747101916AEAE57C6D571BA4 /* MusicCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MusicCore; path = Packages/MusicCore; sourceTree = SOURCE_ROOT; };
+		77577B92FBBF28A01125D20E /* AppDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiagnostics.swift; sourceTree = "<group>"; };
 		8167222DE444581ED95F2C44 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		823FE2EFCE9EA33B2D56DFFE /* ListeningShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningShortcuts.swift; sourceTree = "<group>"; };
 		8383293CB935A7FB493A509D /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
@@ -175,6 +181,7 @@
 			isa = PBXGroup;
 			children = (
 				BFBDB283C4159B3CA0C630F5 /* PerformanceTests.swift */,
+				47025733BEB52DDE10B28916 /* PlaybackReliabilityTests.swift */,
 				CE8F265C8CB8D997BDA943ED /* PlaybackTests.swift */,
 				5115DC5C86628DBC53723F4C /* StorageTests.swift */,
 			);
@@ -184,6 +191,7 @@
 		72F8B600EAA1782118832349 /* Infrastructure */ = {
 			isa = PBXGroup;
 			children = (
+				77577B92FBBF28A01125D20E /* AppDiagnostics.swift */,
 				E60B709CA3B42F39B4F15ABB /* AppStore.swift */,
 				715996019F0269517EB0FC36 /* ArtworkStore.swift */,
 				101812EC0053C403AFF8EE3F /* CarPlaySceneDelegate.swift */,
@@ -262,6 +270,7 @@
 			isa = PBXGroup;
 			children = (
 				E6962A22ED1E3526ECF8530F /* CollectionDetailView.swift */,
+				4BEFFC9A7E30BEB11DDDDBD5 /* DiagnosticsView.swift */,
 				C3230BA6C518D8BD0E3C5D9E /* IntelligenceViews.swift */,
 				F294E5478113520B84A1A87B /* LibraryView.swift */,
 				076C271DE196E8E04FD497EA /* ListeningStatisticsView.swift */,
@@ -441,10 +450,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0393570CC20795AC5CE7E0DD /* AppDiagnostics.swift in Sources */,
 				D89236CFC0011DC83E4091CD /* AppStore.swift in Sources */,
 				79D33F41FBBC778C677DC136 /* ArtworkStore.swift in Sources */,
 				0EB3EA8D60C9ACED5BFEEA27 /* CarPlaySceneDelegate.swift in Sources */,
 				89B4F118DA399A12DF4345CD /* CollectionDetailView.swift in Sources */,
+				F65F7C425E58712DCCEAC54B /* DiagnosticsView.swift in Sources */,
 				DEDE3635AC9D95EA04F7398F /* DownloadManager.swift in Sources */,
 				616041EB2EB187798E32EEE5 /* IntelligenceViews.swift in Sources */,
 				54F40182D3F99B858BB5E17F /* LibraryCache.swift in Sources */,
@@ -495,6 +506,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E6483B8A71C139A72392B1E9 /* PerformanceTests.swift in Sources */,
+				0F9470B844FBC289EFC0008A /* PlaybackReliabilityTests.swift in Sources */,
 				613B516E94CA7D10A6737951 /* PlaybackTests.swift in Sources */,
 				5E2D0B03423CDD71CC41FC07 /* StorageTests.swift in Sources */,
 			);
@@ -708,7 +720,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -791,7 +803,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -875,7 +887,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1024,7 +1036,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1101,7 +1113,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.3.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

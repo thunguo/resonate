@@ -36,7 +36,9 @@ public actor MusicRepository {
     public init(storage: any ResourceStorage) { self.storage = storage }
 
     public func cached<Value: Codable & Sendable>(_ type: Value.Type, key: String) async throws -> CachedValue<Value>? {
-        if let cached = decoded[key] as? CachedValue<Value> { access[key] = .now; return cached }
+        if let cached = decoded[key] as? CachedValue<Value> { let measurement = PerformanceInterval(.repositoryMemory); defer { measurement.end() }; access[key] = .now; return cached }
+        let measurement = PerformanceInterval(.repositoryDisk)
+        defer { measurement.end() }
         let epoch = revision
         let data: Data?
         if let saved = memory[key] { data = saved }
@@ -157,6 +159,8 @@ public actor MusicRepository {
         }
         let id = UUID()
         let task = Task<Data, Error> {
+            let measurement = PerformanceInterval(.repositoryNetwork)
+            do {
             let cached = CachedValue(try await fetch())
             try Task.checkCancellation()
             guard epoch == revision, flights[key]?.id == id else { throw CancellationError() }
@@ -164,7 +168,8 @@ public actor MusicRepository {
             try await storage.write(data, key: key)
             try Task.checkCancellation(); guard epoch == revision else { throw CancellationError() }
             remember(data, key: key); if memory[key] != nil { decoded[key] = cached }
-            return data
+            measurement.end(); return data
+            } catch { measurement.end(error is CancellationError ? .cancelled : .failed); throw error }
         }
         flights[key] = Flight(id: id, task: task)
         defer { if flights[key]?.id == id { flights[key] = nil } }
@@ -193,6 +198,7 @@ public actor LocalMusicIndex {
         entries = tracks.filter { seen.insert($0.id).inserted }.map { Entry(track: $0, text: Self.fold($0.title + " " + $0.artistName + " " + $0.album.name)) }
     }
     public func search(_ query: String, limit: Int = 50) -> [Track] {
+        let measurement = PerformanceInterval(.localSearch); defer { measurement.end() }
         let words = Self.fold(query).split(whereSeparator: \.isWhitespace)
         guard !words.isEmpty else { return [] }
         return Array(entries.lazy.filter { entry in words.allSatisfy { entry.text.contains($0) } }.prefix(limit).map(\.track))

@@ -68,7 +68,7 @@ struct MiniPlayer: View {
                         VStack(alignment: .leading, spacing: 3) { Text(track.title).font(.subheadline.weight(.medium)).lineLimit(1); Text(track.artistName).font(.caption).foregroundStyle(Palette.secondary).lineLimit(1) }.frame(maxWidth: .infinity, alignment: .leading)
                     }.contentShape(Rectangle())
                 }.buttonStyle(MusicPressStyle()).accessibilityIdentifier("miniPlayer").accessibilityLabel("打开播放器，\(track.title)")
-                IconButton(symbol: store.player.isPlaying || store.player.isBuffering ? "pause.fill" : "play.fill", label: store.player.isPlaying || store.player.isBuffering ? "暂停" : "继续播放") { store.player.toggle() }
+                IconButton(symbol: store.player.snapshot.offersPause ? "pause.fill" : "play.fill", label: store.player.snapshot.offersPause ? "暂停" : "继续播放") { store.player.toggle() }
                 IconButton(symbol: "forward.end.fill", label: "下一首", size: 17) { store.player.next() }.disabled(store.player.restorationPending)
             }.padding(.horizontal, native ? 12 : 8).padding(.vertical, 8)
                 .background {

@@ -9,6 +9,7 @@ struct AirPlayButton: UIViewRepresentable {
 struct PlayerView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var showLyrics = false
     @State private var lyricsPosition = LyricsReadingPosition()
     @State private var showQueue = false
@@ -18,21 +19,33 @@ struct PlayerView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
-                ScrollView {
-                    if let track = store.player.current {
-                        VStack(alignment: .leading, spacing: 14) {
-                            HStack { IconButton(symbol: "chevron.down", label: "收起播放器") { dismiss() }.accessibilityIdentifier("closePlayer"); Spacer(); Eyebrow(text: store.player.isPreview ? "正在试听" : "正在播放"); Spacer(); moreMenu(track) }
-                            Artwork(url: track.album.artwork, size: min(geometry.size.width - 48, min(360, max(180, geometry.size.height * 0.36))), radius: 12).frame(maxWidth: .infinity).padding(.top, 4).shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 12)
-                            VStack(alignment: .leading, spacing: 10) {
+                if let track = store.player.current {
+                    VStack(spacing: 8) {
+                        HStack {
+                            IconButton(symbol: "chevron.down", label: "收起播放器") { dismiss() }.accessibilityIdentifier("closePlayer")
+                            Spacer(); Eyebrow(text: store.player.snapshot.phase.label); Spacer(); moreMenu(track)
+                        }.padding(.horizontal, 20)
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Artwork(url: track.album.artwork, size: artworkSize(geometry), radius: 12)
+                                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                                    .shadow(color: .black.opacity(0.08), radius: 20, x: 0, y: 12)
                                 HStack(alignment: .top, spacing: 12) {
-                                    Text(track.title).accessibilityIdentifier("playerTrackTitle").font(.title2.weight(.semibold)).lineLimit(4).frame(maxWidth: .infinity, alignment: .leading)
-                                    IconButton(symbol: store.likedIDs.contains(track.id) ? "heart.fill" : "heart", label: store.likedIDs.contains(track.id) ? "取消喜欢" : "喜欢", size: 23) { Task { await store.toggleLike(track) } }
+                                    Text(track.title).accessibilityIdentifier("playerTrackTitle").font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                                    IconButton(symbol: store.likedIDs.contains(track.id) ? "heart.fill" : "heart", label: store.likedIDs.contains(track.id) ? "取消喜欢" : "喜欢", size: 23, feedback: true) { Task { await store.toggleLike(track) } }
                                 }
                                 ViewThatFits(in: .horizontal) {
                                     HStack(spacing: 10) { artistLink(track); Text("·").foregroundStyle(Palette.secondary).accessibilityHidden(true); albumLink(track) }
                                     VStack(alignment: .leading, spacing: 4) { artistLink(track); albumLink(track) }
                                 }
-                            }
+                                if let error = store.player.error { InlineError(message: error) { store.player.resume() } }
+                                if let downloadMessage { Text(downloadMessage).font(.footnote).foregroundStyle(Palette.secondary) }
+                                Button { showExplanation = true } label: {
+                                    HStack { Text("关于这首歌").font(.subheadline); Spacer(); Image(systemName: "arrow.up.right") }.frame(minHeight: 44).contentShape(Rectangle())
+                                }.buttonStyle(MusicPressStyle())
+                            }.padding(.horizontal, 24).padding(.bottom, 8)
+                        }.scrollIndicators(.hidden)
+                        VStack(spacing: 8) {
                             PlaybackTimeline()
                             controls
                             HStack {
@@ -40,18 +53,18 @@ struct PlayerView: View {
                                 Spacer(); AirPlayButton().frame(width: 48, height: 44).accessibilityLabel("选择音频输出设备"); Spacer()
                                 IconButton(symbol: "text.line.first.and.arrowtriangle.forward", label: "播放队列", size: 23) { showQueue = true }.accessibilityIdentifier("queueButton")
                             }.padding(.horizontal, 16)
-                            if let error = store.player.error { InlineError(message: error) { store.player.resume() } }
-                            if let downloadMessage { Text(downloadMessage).font(.footnote).foregroundStyle(Palette.secondary) }
-                            Button { showExplanation = true } label: { HStack { VStack(alignment: .leading, spacing: 6) { Text("关于这首歌").font(.subheadline.weight(.medium)); Text("听见更多，也了解更多").font(.caption).foregroundStyle(Palette.secondary) }; Spacer(); Image(systemName: "arrow.up.right").font(.subheadline) }.padding(.vertical, 18).padding(.horizontal, 18).background(Palette.surface.opacity(0.65), in: RoundedRectangle(cornerRadius: 12)) }.buttonStyle(.plain)
-                        }.padding(.horizontal, 24).padding(.bottom, 32).frame(width: geometry.size.width)
-                    }
-                }.scrollIndicators(.hidden).background { ArtworkAtmosphere(url: store.player.current?.album.artwork).ignoresSafeArea() }
+                        }.padding(.horizontal, 24).padding(.bottom, 8)
+                    }.background { ArtworkAtmosphere(url: track.album.artwork).ignoresSafeArea() }
+                }
             }.cabinetBackground().toolbar(.hidden, for: .navigationBar)
                 .sheet(isPresented: $showLyrics) { LyricsView(reading: $lyricsPosition) }
                 .sheet(isPresented: $showQueue) { QueueView(anchor: $queueAnchor) }
                 .sheet(isPresented: $showExplanation) { if let track = store.player.current { ExplanationView(track: track) } }
                 .sheet(isPresented: Binding(get: { store.showLogin && !showLyrics && !showQueue && !showExplanation }, set: { store.showLogin = $0 })) { LoginView() }
         }
+    }
+    private func artworkSize(_ geometry: GeometryProxy) -> CGFloat {
+        min(geometry.size.width - 48, max(100, min(typeSize.isAccessibilitySize ? 160 : 360, geometry.size.height * (typeSize.isAccessibilitySize ? 0.22 : 0.38))))
     }
     @ViewBuilder private func artistLink(_ track: Track) -> some View {
         if let artist = track.artists.first { NavigationLink { CollectionDetailView(artist: artist) } label: { Text(track.artistName).font(.title3).foregroundStyle(Palette.secondary).fixedSize(horizontal: false, vertical: true).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle()) }.buttonStyle(.plain) }
@@ -65,7 +78,7 @@ struct PlayerView: View {
             Spacer(minLength: 8)
             IconButton(symbol: "backward.end.fill", label: "上一首", size: 27) { store.player.previous() }
             Spacer(minLength: 8)
-            Button { store.player.toggle() } label: { Image(systemName: store.player.isPlaying || store.player.isBuffering ? "pause.fill" : "play.fill").font(.system(size: 31)).frame(width: 72, height: 72).foregroundStyle(Palette.background).background(Palette.accent, in: Circle()) }.buttonStyle(MusicPressStyle()).accessibilityLabel(store.player.isPlaying ? "暂停" : "播放").accessibilityIdentifier("mainPlayPause").accessibilityValue(store.player.isPlaying ? "播放中" : store.player.isBuffering ? "缓冲中" : "已暂停")
+            Button { store.player.toggle() } label: { Image(systemName: store.player.snapshot.offersPause ? "pause.fill" : "play.fill").font(.system(size: 31)).frame(width: 72, height: 72).foregroundStyle(Palette.background).background(Palette.accent, in: Circle()) }.buttonStyle(MusicPressStyle()).accessibilityLabel(store.player.snapshot.offersPause ? "暂停" : "播放").accessibilityIdentifier("mainPlayPause").accessibilityValue(store.player.isPlaying ? "播放中" : store.player.isBuffering ? "缓冲中" : "已暂停")
             Spacer(minLength: 8)
             IconButton(symbol: "forward.end.fill", label: "下一首", size: 27) { store.player.next() }
             Spacer(minLength: 8)
@@ -75,7 +88,7 @@ struct PlayerView: View {
     private func moreMenu(_ track: Track) -> some View {
         Menu {
             Menu("播放音质") { ForEach(AudioQuality.allCases, id: \.self) { quality in Button(quality.label) { store.preferences.quality = quality; store.savePreferences() } } }
-            Button("下载歌曲", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); downloadMessage = "已加入下载队列" } catch { downloadMessage = error.localizedDescription } }
+            if store.downloads.isAuthorized { Button("下载歌曲", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); downloadMessage = "已加入下载队列" } catch { downloadMessage = error.localizedDescription } } }
             Menu("定时停止") { ForEach([15, 30, 45, 60], id: \.self) { minutes in Button("\(minutes) 分钟后") { store.player.setSleepTimer(minutes: minutes) } }; Button("关闭定时停止") { store.player.setSleepTimer(minutes: nil) } }
             if let date = store.player.sleepDate { Text("将在 \(date.formatted(date: .omitted, time: .shortened)) 停止") }
             ShareLink(item: track.webURL) { Label("分享歌曲", systemImage: "square.and.arrow.up") }
@@ -155,9 +168,9 @@ struct LyricsView: View {
                         guard count > 0, !restoredPosition else { return }; restoredPosition = true
                         if let target = reading.following ? active : reading.anchor { proxy.scrollTo(target, anchor: .center) }
                     }
-                    .onChange(of: active) { _, value in guard reading.following, let value else { return }; withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) { proxy.scrollTo(value, anchor: .center) } }
+                    .onChange(of: active) { _, value in guard reading.following, let value else { return }; withAnimation(reduceMotion ? nil : .easeOut(duration: Motion.lyrics)) { proxy.scrollTo(value, anchor: .center) } }
                     .safeAreaInset(edge: .bottom) {
-                        if !reading.following { Button("回到当前") { reading.following = true; if let active { withAnimation(reduceMotion ? nil : .easeOut(duration: 0.22)) { proxy.scrollTo(active, anchor: .center) } } }.padding(.horizontal, 20).frame(minHeight: 44).background(.regularMaterial, in: Capsule()).padding() }
+                        if !reading.following { Button("回到当前") { reading.following = true; if let active { withAnimation(reduceMotion ? nil : .easeOut(duration: Motion.lyrics)) { proxy.scrollTo(active, anchor: .center) } } }.padding(.horizontal, 20).frame(minHeight: 44).background(.regularMaterial, in: Capsule()).padding() }
                     }
             }.cabinetBackground().navigationTitle("歌词").navigationBarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .task(id: store.player.current?.id) {

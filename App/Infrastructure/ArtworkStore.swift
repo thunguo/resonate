@@ -1,3 +1,4 @@
+import MusicCore
 import UIKit
 import CryptoKit
 import ImageIO
@@ -109,6 +110,7 @@ actor ArtworkStore {
         }
     }
     private static func decode(_ data: Data, pixels: Int) -> UIImage? {
+        let measurement = PerformanceInterval(.imageDecode); defer { measurement.end() }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil), let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: pixels, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
         return UIImage(cgImage: cg)
     }

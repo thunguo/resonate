@@ -38,6 +38,7 @@ struct SettingsView: View {
                 Button("清除本机播放与搜索记录", role: .destructive) { confirmHistory = true }
                 Button("清除封面、歌词与音乐资料缓存", role: .destructive) { confirmCache = true }
                 Button("清除 AI 编排与解读记录", role: .destructive) { confirmAI = true }
+                NavigationLink("诊断与反馈") { DiagnosticsView() }
                 NavigationLink("本机聆听统计") { ListeningStatisticsView() }
                 NavigationLink("隐私与数据使用") { PrivacyView() }
             }

@@ -1,6 +1,19 @@
 import SwiftUI
 import MusicCore
 
+enum Motion {
+    static let press = 0.12
+    static let state = 0.18
+    static let lyrics = 0.22
+    static let player = 0.28
+    static let atmosphere = 0.5
+    static let reduced = 0.1
+}
+enum Layout {
+    static let page: CGFloat = 20
+    static let panelRadius: CGFloat = 14
+    static let touch: CGFloat = 44
+}
 enum Palette {
     static let background = adaptive(0xF5F5F2, 0x111213)
     static let text = adaptive(0x20211F, 0xF4F4EF)
@@ -58,16 +71,17 @@ struct ArtworkAtmosphere: View {
             guard let url else { tint = nil; return }
             let color = await ArtworkStore.shared.tint(url)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: reduceMotion ? 0.1 : 0.5)) { tint = color }
+            withAnimation(.easeInOut(duration: reduceMotion ? Motion.reduced : Motion.atmosphere)) { tint = color }
         }
     }
 }
 struct MusicPressStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.78 : 1)
+        configuration.label.opacity(!isEnabled ? 0.42 : configuration.isPressed ? 0.78 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.975 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.easeOut(duration: Motion.press), value: configuration.isPressed)
     }
 }
 struct DelayedProgress: View {
@@ -95,16 +109,17 @@ struct IconButton: View {
     let symbol: String
     let label: String
     var size: CGFloat = 20
+    var feedback = false
     var action: () -> Void
-    var body: some View { Button { UISelectionFeedbackGenerator().selectionChanged(); action() } label: { Image(systemName: symbol).font(.system(size: size, weight: .regular)).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.buttonStyle(MusicPressStyle()).foregroundStyle(Palette.text).accessibilityLabel(label) }
+    var body: some View { Button { if feedback { UISelectionFeedbackGenerator().selectionChanged() }; action() } label: { Image(systemName: symbol).font(.system(size: size, weight: .regular)).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.buttonStyle(MusicPressStyle()).foregroundStyle(Palette.text).accessibilityLabel(label) }
 }
 struct FilledButton: View {
     let title: String
     var symbol: String? = nil
     var action: () -> Void
     var body: some View {
-        Button(action: action) { HStack(spacing: 8) { if let symbol { Image(systemName: symbol) }; Text(title).fontWeight(.medium) }.frame(maxWidth: .infinity).frame(minHeight: 50) }
-            .buttonStyle(MusicPressStyle()).foregroundStyle(Palette.background).background(Palette.accent, in: RoundedRectangle(cornerRadius: 14))
+        Button(action: action) { HStack(spacing: 8) { if let symbol { Image(systemName: symbol) }; Text(title).fontWeight(.medium) }.frame(maxWidth: .infinity).frame(minHeight: 50).foregroundStyle(Palette.background).background(Palette.accent, in: RoundedRectangle(cornerRadius: Layout.panelRadius)) }
+            .buttonStyle(MusicPressStyle())
     }
 }
 struct EmptyState: View {
@@ -147,7 +162,7 @@ struct TrackRow: View {
                 Button("加入队列", systemImage: "text.append") { store.player.enqueue([track]); store.notify("已加入队列") }
                 Button(store.likedIDs.contains(track.id) ? "取消喜欢" : "喜欢", systemImage: store.likedIDs.contains(track.id) ? "heart.slash" : "heart") { Task { await store.toggleLike(track) } }
                 Button("加入歌单", systemImage: "plus") { if store.requireLogin() { addToPlaylist = true } }
-                Button("下载", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); store.notify("已加入下载") } catch { store.report(error) } }
+                if store.downloads.isAuthorized { Button("下载", systemImage: "arrow.down.circle") { do { try store.downloads.enqueue(track); store.notify("已加入下载") } catch { store.report(error) } } }
                 ShareLink(item: track.webURL) { Label("分享歌曲", systemImage: "square.and.arrow.up") }
             } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).foregroundStyle(Palette.secondary) }.accessibilityLabel("\(track.title)的更多操作")
         }.padding(.vertical, 7)
